@@ -9,10 +9,13 @@ import (
     "net/http"
     "net/rpc"
     "time"
+    "strings"
+    "strconv"
+    "encoding/binary"
 )
 
 import (
-    "kademlia"
+    "eecs345/kademlia"
 )
 
 
@@ -30,8 +33,14 @@ func main() {
     listenStr := args[0]
     firstPeerStr := args[1]
 
+    //catch ip and port of listener so we can pass it to others
+    ip_and_port := strings.Split(listenStr,":")
+    ip := net.ParseIP(ip_and_port[0])
+    port,err := strconv.ParseUint(ip_and_port[1], 0, 16)
+    //need to convert port to 16bit!!!!!!!!!!!!!
+
     fmt.Printf("kademlia starting up!\n")
-    kadem := kademlia.NewKademlia()
+    kadem := kademlia.NewKademlia(ip, binary.LittleEndian.Uint16(port))
 
     rpc.Register(kadem)
     rpc.HandleHTTP()
