@@ -15,7 +15,7 @@ import (
 )
 
 import (
-    "eecs345/kademlia"
+    "kademlia/kademlia"
 )
 
 
