@@ -10,8 +10,7 @@ import (
     "net/rpc"
     "time"
     "strings"
-    "strconv"
-    "encoding/binary"
+    "syscall"
 )
 
 import (
@@ -36,11 +35,12 @@ func main() {
     //catch ip and port of listener so we can pass it to others
     ip_and_port := strings.Split(listenStr,":")
     ip := net.ParseIP(ip_and_port[0])
-    port,err := strconv.ParseUint(ip_and_port[1], 0, 16)
+    //,err := strconv.ParseUint(ip_and_port[1], 0, 16)
+    port, err := syscall.UTF16FromString(ip_and_port[1])
     //need to convert port to 16bit!!!!!!!!!!!!!
 
     fmt.Printf("kademlia starting up!\n")
-    kadem := kademlia.NewKademlia(ip, binary.LittleEndian.Uint16(port))
+    kadem := kademlia.NewKademlia(ip, port[0])
 
     rpc.Register(kadem)
     rpc.HandleHTTP()
