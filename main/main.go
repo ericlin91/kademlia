@@ -70,5 +70,7 @@ func main() {
 
     log.Printf("ping msgID: %s\n", ping.MsgID.AsString())
     log.Printf("pong msgID: %s\n", pong.MsgID.AsString())
+
+    //kadem.DoPing(ip, 7890)
 }
 

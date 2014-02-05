@@ -28,6 +28,7 @@ type Pong struct {
 func (k *Kademlia) Ping(ping Ping, pong *Pong) error {
     // This one's a freebie.
     pong.MsgID = CopyID(ping.MsgID)
+    pong.Sender = *k.info
     return nil
 }
 
