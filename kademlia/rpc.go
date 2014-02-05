@@ -29,6 +29,7 @@ func (k *Kademlia) Ping(ping Ping, pong *Pong) error {
     // This one's a freebie.
     pong.MsgID = CopyID(ping.MsgID)
     pong.Sender = *k.info
+    k.Update(&ping.Sender)
     return nil
 }
 
@@ -47,7 +48,9 @@ type StoreResult struct {
 }
 
 func (k *Kademlia) Store(req StoreRequest, res *StoreResult) error {
-    // TODO: Implement.
+    k.bin[req.Key] = req.Value
+    k.Update(&req.Sender)
+    res.MsgID = CopyID(req.MsgID)
     return nil
 }
 
@@ -72,7 +75,17 @@ type FindNodeResult struct {
 }
 
 func (k *Kademlia) FindNode(req FindNodeRequest, res *FindNodeResult) error {
-    // TODO: Implement.
+    //first get everything in the bucket the node requested would have gone in and put it in a FoundNode slice
+    //Then get everything from the bucket above and below unless you have 20 nodes already
+        //keep putting everything in the slice
+        //need to be careful of edge cases: ends of list
+        //keep taking from adjacent buckets till you find 20 entries total
+        //need to put in check in case you search the whole list before finding 20
+    //Sort all the nodes you got by xor distance 
+        //use the go sort interface (planet example)
+    //return top 20, cut off the rest
+
+    // remember to fill out result struct and call update
     return nil
 }
 

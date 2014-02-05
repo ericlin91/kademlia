@@ -14,6 +14,7 @@ import(
 type Kademlia struct {
     info *Contact
     table *Table
+    bin  map[ID][]byte
 }
 
 func NewKademlia(host net.IP, port uint16) *Kademlia {
@@ -23,6 +24,7 @@ func NewKademlia(host net.IP, port uint16) *Kademlia {
     ret.info.Host = host
     ret.info.Port = port
     ret.table = NewTable(ret.info.NodeID)
+    ret.bin = make(map[ID][]byte)
     return ret
 }
 
@@ -114,4 +116,62 @@ func (k *Kademlia) DoPing(rhost net.IP, port uint16) int {
     }
 
     return ack
+}
+
+func (k *Kademlia) DoStore(remoteContact *Contact, Key ID, Value []byte) int {
+	ack := 0
+	address := remoteContact.Host.String() +":"+ strconv.Itoa(int(remoteContact.Port))
+
+	client, err := rpc.DialHTTP("tcp", address)
+    if err != nil {
+        log.Fatal("DialHTTP: ", err)
+    }
+
+    //fill out request
+    req := new(StoreRequest)
+    req.MsgID = NewRandomID()
+    req.Sender = *k.info
+
+    var res StoreResult
+    err = client.Call("Kademlia.Store", req, &res)
+    if err != nil {
+        log.Fatal("Call: ", err)
+    }
+
+    //print confirmation
+    log.Printf("req msgID: %s\n", req.MsgID.AsString())
+    log.Printf("res msgID: %s\n", res.MsgID.AsString())
+
+    if req.MsgID.Compare(res.MsgID) == 0 {
+    	ack = 1
+    	k.Update(remoteContact)
+    }
+
+    return ack
+}
+
+func (k *Kademlia) DoFindNode(remoteContact *Contact, searchKey ID) []FoundNode {
+	ack := 0
+	address := remoteContact.Host.String() +":"+ strconv.Itoa(int(remoteContact.Port))
+
+	client, err := rpc.DialHTTP("tcp", address)
+    if err != nil {
+        log.Fatal("DialHTTP: ", err)
+    }
+
+    //fill out request
+    req := new(FindNodeRequest)
+    req.MsgID = NewRandomID()
+    req.Sender = *k.info
+    req.NodeID = searchKey
+
+    var res StoreResult
+    err = client.Call("Kademlia.FindNode", req, &res)
+    if err != nil {
+        log.Fatal("Call: ", err)
+    }
+
+    k.Update(remoteContact)
+
+    return res.FindNodeResult
 }
