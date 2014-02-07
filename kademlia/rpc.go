@@ -130,7 +130,7 @@ func (k *Kademlia) FindNode(req FindNodeRequest, res *FindNodeResult) error {
 
     //Get 20 closest
     bucket_slice = bucket_slice[0:19]
-    FoundNodes := []FoundNode
+    FoundNodes := ([]FoundNode)
 
     for i := 0 {
         FoundNodes[i].IPAddr = bucket_slice[i].Host.String()
