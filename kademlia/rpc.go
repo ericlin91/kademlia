@@ -84,7 +84,7 @@ func (a ByDistance) Less(i, j int) bool {return a[i].NodeID.Less(a[j].NodeID)}
 func (k *Kademlia) FindNode(req FindNodeRequest, res *FindNodeResult) error {
     //first get everything in the bucket the node requested would have gone in and put it in a FoundNode slice
     bucket_num := req.NodeID.Xor(k.table.NodeID).PrefixLen()
-    bucket_slice := []*Contact
+    bucket_slice := []*Contact()
 
     counter := 0
     bucketcounter := 0
@@ -133,7 +133,7 @@ func (k *Kademlia) FindNode(req FindNodeRequest, res *FindNodeResult) error {
 
     //Get 20 closest
     bucket_slice = bucket_slice[0:19]
-    FoundNodes := []FoundNode
+    FoundNodes := []FoundNode()
 
     for i := 0; i<20; i++ {
         FoundNodes[i].IPAddr = bucket_slice[i].Host.String()
