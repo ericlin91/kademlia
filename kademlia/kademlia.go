@@ -165,7 +165,7 @@ func (k *Kademlia) DoFindNode(remoteContact *Contact, searchKey ID) []FoundNode 
     req.Sender = *k.info
     req.NodeID = searchKey
 
-    var res StoreResult
+    var res FindNodeResult
     err = client.Call("Kademlia.FindNode", req, &res)
     if err != nil {
         log.Fatal("Call: ", err)
@@ -173,5 +173,5 @@ func (k *Kademlia) DoFindNode(remoteContact *Contact, searchKey ID) []FoundNode 
 
     k.Update(remoteContact)
 
-    return res.FindNodeResult
+    return res.Nodes
 }
