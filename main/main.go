@@ -10,7 +10,9 @@ import (
     "net/rpc"
     "time"
     "strings"
-    //"syscall"
+    "strconv"
+    "bufio"
+    "os"
 )
 
 import (
@@ -35,13 +37,10 @@ func main() {
     //catch ip and port of listener so we can pass it to others
     ip_and_port := strings.Split(listenStr,":")
     ip := net.ParseIP(ip_and_port[0])
-    //,err := strconv.ParseUint(ip_and_port[1], 0, 16)
-    //port, err := syscall.UTF16FromString(ip_and_port[1])
-    var port uint16 = 7890
-    //need to convert port to 16bit!!!!!!!!!!!!!!!! in a way that works for linux and windows
+    port,err := strconv.ParseUint(ip_and_port[1], 0, 16)
 
     fmt.Printf("kademlia starting up!\n")
-    kadem := kademlia.NewKademlia(ip, port)
+    kadem := kademlia.NewKademlia(ip, uint16(port))
 
     rpc.Register(kadem)
     rpc.HandleHTTP()
@@ -72,5 +71,41 @@ func main() {
     log.Printf("pong msgID: %s\n", pong.MsgID.AsString())
 
     //kadem.DoPing(ip, 7890)
+
+    for {
+        //bio := bufio.NewReader(os.Stdin)
+        scanner := bufio.NewScanner(bufio.NewReader(os.Stdin))
+        scanner.Split(bufio.ScanWords)
+        scanner.Scan()
+        log.Printf("%s\n",scanner.Text())
+
+        switch cmd := scanner.Text(); cmd {
+        case "ping":
+
+        case "store":
+
+        case "find_node":
+
+        case "find_value":
+
+        case "whoami":
+            fmt.Println(kadem.Info.NodeID.AsString())
+        case "local_find_value":
+        
+        case "get_contact":
+
+        case "iterativeStore":
+
+        case "iterativeFindNode":
+
+        case "iterativeFindValue":
+
+        }
+        //read from input
+        //bufio.Reader
+        //switch on cmd
+        //case "ping"
+        //  doPing()        
+    }
 }
 

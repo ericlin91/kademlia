@@ -12,52 +12,52 @@ import(
 
 // Core Kademlia type. You can put whatever state you want in this.
 type Kademlia struct {
-    info *Contact
-    table *Table
-    bin  map[ID][]byte
+    Info *Contact
+    Contact_table *Table
+    Bin  map[ID][]byte
 }
 
 func NewKademlia(host net.IP, port uint16) *Kademlia {
     ret := new(Kademlia);
-    ret.info = new(Contact)
-    ret.info.NodeID = NewRandomID()
-    ret.info.Host = host
-    ret.info.Port = port
-    ret.table = NewTable(ret.info.NodeID)
-    ret.bin = make(map[ID][]byte)
+    ret.Info = new(Contact)
+    ret.Info.NodeID = NewRandomID()
+    ret.Info.Host = host
+    ret.Info.Port = port
+    ret.Contact_table = NewTable(ret.Info.NodeID)
+    ret.Bin = make(map[ID][]byte)
     return ret
 }
 
-const ListSize = 10 //how many buckets?
+const ListSize = 10 //how many Buckets?
 
 type Table struct {
 	NodeID ID
-	buckets [IDBytes*8]*list.List
+	Buckets [IDBytes*8]*list.List
 }
 
-//make a table
+//make a Contact_table
 func NewTable(owner ID) *Table {
-	table := new(Table)
-	table.NodeID = owner
-	//initialize buckets
+	Contact_table := new(Table)
+	Contact_table.NodeID = owner
+	//initialize Buckets
 	for i := 0; i < IDBytes*8; i++ {
-		table.buckets[i] = list.New();
+		Contact_table.Buckets[i] = list.New();
 	}
-	return table
+	return Contact_table
 }
 
-//update table
+//update Contact_table
 func (k *Kademlia) Update(node *Contact) {
 	//first check you aren't adding yourself
-	if node.NodeID.Compare(k.table.NodeID) != 0 {
+	if node.NodeID.Compare(k.Contact_table.NodeID) != 0 {
 		//how to initialize to nil?
 		var node_holder *list.Element = nil
 
 		//identify correct bucket
-		bucket_num := node.NodeID.Xor(k.table.NodeID).PrefixLen()
+		bucket_num := node.NodeID.Xor(k.Contact_table.NodeID).PrefixLen()
 
 		//check if node already in list
-		bucket := k.table.buckets[bucket_num]
+		bucket := k.Contact_table.Buckets[bucket_num]
 		for i := bucket.Front(); i != nil; i = i.Next() {
 			if i.Value.(*Contact).NodeID.Equals(node.NodeID) {
 				node_holder = i
@@ -97,7 +97,7 @@ func (k *Kademlia) DoPing(rhost net.IP, port uint16) int {
     //fill out ping
     ping := new(Ping)
     ping.MsgID = NewRandomID()
-    ping.Sender = *k.info
+    ping.Sender = *k.Info
 
     var pong Pong
     err = client.Call("Kademlia.Ping", ping, &pong)
@@ -130,7 +130,7 @@ func (k *Kademlia) DoStore(remoteContact *Contact, Key ID, Value []byte) int {
     //fill out request
     req := new(StoreRequest)
     req.MsgID = NewRandomID()
-    req.Sender = *k.info
+    req.Sender = *k.Info
 
     var res StoreResult
     err = client.Call("Kademlia.Store", req, &res)
@@ -151,7 +151,7 @@ func (k *Kademlia) DoStore(remoteContact *Contact, Key ID, Value []byte) int {
 }
 
 func (k *Kademlia) DoFindNode(remoteContact *Contact, searchKey ID) []FoundNode {
-	ack := 0
+	//ack := 0
 	address := remoteContact.Host.String() +":"+ strconv.Itoa(int(remoteContact.Port))
 
 	client, err := rpc.DialHTTP("tcp", address)
@@ -162,7 +162,7 @@ func (k *Kademlia) DoFindNode(remoteContact *Contact, searchKey ID) []FoundNode 
     //fill out request
     req := new(FindNodeRequest)
     req.MsgID = NewRandomID()
-    req.Sender = *k.info
+    req.Sender = *k.Info
     req.NodeID = searchKey
 
     var res FindNodeResult

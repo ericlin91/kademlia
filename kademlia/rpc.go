@@ -29,7 +29,7 @@ type Pong struct {
 func (k *Kademlia) Ping(ping Ping, pong *Pong) error {
     // This one's a freebie.
     pong.MsgID = CopyID(ping.MsgID)
-    pong.Sender = *k.info
+    pong.Sender = *k.Info
     k.Update(&ping.Sender)
     return nil
 }
@@ -49,7 +49,7 @@ type StoreResult struct {
 }
 
 func (k *Kademlia) Store(req StoreRequest, res *StoreResult) error {
-    k.bin[req.Key] = req.Value
+    k.Bin[req.Key] = req.Value
     k.Update(&req.Sender)
     res.MsgID = CopyID(req.MsgID)
     return nil
@@ -83,13 +83,13 @@ func (a ByDistance) Less(i, j int) bool {return a[i].NodeID.Less(a[j].NodeID)}
 
 func (k *Kademlia) FindNode(req FindNodeRequest, res *FindNodeResult) error {
     //first get everything in the bucket the node requested would have gone in and put it in a FoundNode slice
-    bucket_num := req.NodeID.Xor(k.table.NodeID).PrefixLen()
+    bucket_num := req.NodeID.Xor(k.Contact_table.NodeID).PrefixLen()
     bucket_slice := make([]*Contact,60)
 
     counter := 0
     bucketcounter := 0
 
-    bucket := k.table.buckets[bucket_num]
+    bucket := k.Contact_table.Buckets[bucket_num]
     for i := bucket.Front(); i != nil; i = i.Next() {
         bucket_slice[counter] = i.Value.(*Contact)
         counter++
@@ -101,9 +101,9 @@ func (k *Kademlia) FindNode(req FindNodeRequest, res *FindNodeResult) error {
     //Then get everything from the bucket above and below unless you have 20 nodes already
     for len(bucket_slice)< 20 && flag == false{
 
-        //Get nodes from buckets to the left
+        //Get nodes from Buckets to the left
         if bucket_num - bucketcounter >= 0 {
-            bucket = k.table.buckets[bucket_num - bucketcounter]
+            bucket = k.Contact_table.Buckets[bucket_num - bucketcounter]
 
             for i := bucket.Front(); i != nil; i = i.Next() {
                 bucket_slice[counter] = i.Value.(*Contact)
@@ -111,9 +111,9 @@ func (k *Kademlia) FindNode(req FindNodeRequest, res *FindNodeResult) error {
             }
         }
 
-        //Get nodes from buckets to the right
+        //Get nodes from Buckets to the right
         if bucket_num + bucketcounter <= 159 {
-            bucket = k.table.buckets[bucket_num + bucketcounter]
+            bucket = k.Contact_table.Buckets[bucket_num + bucketcounter]
 
             for i := bucket.Front(); i != nil; i = i.Next() {
                 bucket_slice[counter] = i.Value.(*Contact)
@@ -124,7 +124,7 @@ func (k *Kademlia) FindNode(req FindNodeRequest, res *FindNodeResult) error {
         //Increment bucket location counter
         bucketcounter++
 
-        flag := bucket_num - bucketcounter < 0 && bucket_num + bucketcounter > 159
+        flag = bucket_num - bucketcounter < 0 && bucket_num + bucketcounter > 159
 
     }
 
