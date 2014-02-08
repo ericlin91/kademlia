@@ -93,7 +93,11 @@ func main() {
         case "local_find_value":
         
         case "get_contact":
-
+            input_id, err := kademlia.FromString(cmd_arr[1])
+            if err != nil {
+                log.Fatal("Contact: ", err)
+            }
+            kadem.GetContact(input_id)
         case "iterativeStore":
 
         case "iterativeFindNode":
