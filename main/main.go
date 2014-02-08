@@ -85,7 +85,7 @@ func main() {
         case "store":
 
         case "find_node":
-
+            //kadem.DoFindNode(cmd_arr[1], cmd_arr[2])
         case "find_value":
 
         case "whoami":

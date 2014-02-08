@@ -8,6 +8,7 @@ import(
 	"net"
 	"net/rpc"
 	"log"
+	"fmt"
 )
 
 // Core Kademlia type. You can put whatever state you want in this.
@@ -174,4 +175,24 @@ func (k *Kademlia) DoFindNode(remoteContact *Contact, searchKey ID) []FoundNode 
     k.Update(remoteContact)
 
     return res.Nodes
+}
+
+func (k *Kademlia) GetContact(searchid ID) {
+	var node_holder *list.Element = nil
+	bucket_num := searchid.Xor(k.Contact_table.NodeID).PrefixLen()
+	search_bucket := k.Contact_table.Buckets[bucket_num]
+	for i := search_bucket.Front(); i != nil; i = i.Next() {
+
+		
+		if i.Value.(*Contact).NodeID.Equals(searchid) {
+			node_holder = i
+			break
+		}
+	}
+
+	if node_holder == nil{
+		fmt.Printf("ERR\n")
+	}	else{
+		fmt.Printf("%v%v\n", node_holder.Value.(*Contact).Host, node_holder.Value.(*Contact).Port)
+	}
 }
