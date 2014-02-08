@@ -75,11 +75,11 @@ func main() {
     for {
         //bio := bufio.NewReader(os.Stdin)
         scanner := bufio.NewScanner(bufio.NewReader(os.Stdin))
-        scanner.Split(bufio.ScanWords)
+        scanner.Split(bufio.ScanLines)
         scanner.Scan()
-        log.Printf("%s\n",scanner.Text())
-
-        switch cmd := scanner.Text(); cmd {
+        //log.Printf("%s\n",scanner.Text())
+        cmd_arr := strings.Split(scanner.Text(), " ")
+        switch cmd_arr[0] {
         case "ping":
 
         case "store":
