@@ -91,7 +91,16 @@ func main() {
         case "whoami":
             fmt.Println(kadem.Info.NodeID.AsString())
         case "local_find_value":
-        
+            input_id, err := kademlia.FromString(cmd_arr[1])
+            if err != nil {
+                log.Fatal("Contact: ", err)
+            }
+            map_data := kadem.Bin[input_id]
+            if map_data == nil {
+                fmt.Println("ERR")
+            } else {
+                fmt.Println(map_data)
+            }
         case "get_contact":
             input_id, err := kademlia.FromString(cmd_arr[1])
             if err != nil {
