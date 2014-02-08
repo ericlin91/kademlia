@@ -47,50 +47,54 @@ func NewTable(owner ID) *Table {
 	return Contact_table
 }
 
-//update Contact_table
+   //update Contact_table
 func (k *Kademlia) Update(node *Contact) {
-	//first check you aren't adding yourself
-	if node.NodeID.Compare(k.Contact_table.NodeID) != 0 {
-		//how to initialize to nil?
-		var node_holder *list.Element = nil
+    //first check you aren't adding yourself
+    if node.NodeID.Compare(k.Contact_table.NodeID) != 0 {
+        //how to initialize to nil?
+        var node_holder *list.Element = nil
 
-		//identify correct bucket
-		bucket_num := node.NodeID.Xor(k.Contact_table.NodeID).PrefixLen()
+        //identify correct bucket
+        bucket_num := node.NodeID.Xor(k.Contact_table.NodeID).PrefixLen()
 
-		//check if node already in list
-		bucket := k.Contact_table.Buckets[bucket_num]
-		for i := bucket.Front(); i != nil; i = i.Next() {
-			if i.Value.(*Contact).NodeID.Equals(node.NodeID) {
-				node_holder = i
-				break
-			}
-		}
+        //check if node already in list
+        bucket := k.Contact_table.Buckets[bucket_num]
+        for i := bucket.Front(); i != nil; i = i.Next() {
+            if i.Value.(*Contact).NodeID.Equals(node.NodeID) {
+                node_holder = i
+                break
+            }
+        }
 
-		//if old, move to end
-		if node_holder!=nil {
-			bucket.MoveToBack(node_holder)
-		} else if node_holder==nil && bucket.Len()!=ListSize { //if new and list not full, add to end
-			bucket.PushBack(node_holder)
-		} else if node_holder==nil && bucket.Len()==ListSize { //if new and list full, ping oldest
-			//if oldest responds, do nothing
-			//else drop oldest, add new to end
-			//Ping(///front of list);
-			if ack := k.DoPing(node.Host, node.Port); ack == 0{
-				bucket.Remove(bucket.Front())
-				bucket.PushBack(node_holder)
-			}	
-		
-		} else{
-			log.Fatal("Update failed.\n")
-		}
-	}
+        //if old, move to end
+        if node_holder!=nil {
+            bucket.MoveToBack(node_holder)
+        } else if node_holder==nil && bucket.Len()!=ListSize { //if new and list not full, add to end
+            bucket.PushBack(node)
+        } else if node_holder==nil && bucket.Len()==ListSize { //if new and list full, ping oldest
+            //if oldest responds, do nothing
+            //else drop oldest, add new to end
+            //Ping(///front of list);
+            //address := node.Host.String() +":"+ strconv.Itoa(int(node.Port))
+            if ack := k.DoPing(node.Host, node.Port); ack == 0{
+                bucket.Remove(bucket.Front())
+                bucket.PushBack(node)
+            }   
+        
+        } else{
+            log.Fatal("Update failed.\n")
+        }
+    }
 }
 
+//func (k *Kademlia) DoPing(address string) int {
 func (k *Kademlia) DoPing(rhost net.IP, port uint16) int {
-	ack := 0
-	address := rhost.String() +":"+ strconv.Itoa(int(port))
 
-	client, err := rpc.DialHTTP("tcp", address)
+    ack := 0
+    address := rhost.String() +":"+ strconv.Itoa(int(port))
+                    fmt.Println(address)
+
+    client, err := rpc.DialHTTP("tcp", address)
     if err != nil {
         log.Fatal("DialHTTP: ", err)
     }
@@ -109,11 +113,11 @@ func (k *Kademlia) DoPing(rhost net.IP, port uint16) int {
     k.Update(&pong.Sender)
 
     //print confirmation
-    log.Printf("ping msgID: %s\n", ping.MsgID.AsString())
-    log.Printf("pong msgID: %s\n", pong.MsgID.AsString())
-
+    fmt.Println("ping msgID: "+ ping.MsgID.AsString())
+    fmt.Println("pong msgID: "+ pong.MsgID.AsString())
+    fmt.Println("pinging")
     if ping.MsgID.Compare(pong.MsgID) == 0 {
-    	ack = 1
+        ack = 1
     }
 
     return ack

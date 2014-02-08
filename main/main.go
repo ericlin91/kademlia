@@ -77,10 +77,23 @@ func main() {
         scanner := bufio.NewScanner(bufio.NewReader(os.Stdin))
         scanner.Split(bufio.ScanLines)
         scanner.Scan()
-        //log.Printf("%s\n",scanner.Text())
         cmd_arr := strings.Split(scanner.Text(), " ")
+
         switch cmd_arr[0] {
         case "ping":
+            //case with host:port
+            if host_port := strings.Split(cmd_arr[1], ":"); host_port[0] != cmd_arr[1] {
+                port, err := strconv.ParseUint(host_port[1], 0, 16)
+                host, err := net.LookupIP(host_port[0])
+
+                if err != nil {
+                    log.Fatal("ParseUint: ", err)
+                }
+
+                if kadem.DoPing(host[1], uint16(port) ) == 0 {
+                    fmt.Println("Ping failed.")
+                }
+            }
 
         case "store":
 
