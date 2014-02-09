@@ -1,0 +1,39 @@
+ITERATIVE FINDNODE
+
+FLOW:
+	Call findnode
+	Save the returned 20 nodes in a shortlist
+	Track the closest node ()
+
+	Loop starts:
+		Ask 3 (alpha) nodes from the shortlist to run Findnode
+		Put the k nodes returned from those Findnode calls in the shortlist if they haven't been called 
+			Basically make sure no repeats in the shortlist, sort the shortlist, trim to 20 nodes
+		Update the closest node if a closer one is returned
+
+		Stop the loop after successfully calling 20 (k) nodes
+		OR
+		none of the nodes returned in one iteration of the loop is closer than the current closest node
+	Loop ends.
+
+	If the loop ends because of the second condition, ask all the nodes in the shortlist that you haven't called to run Findnode, drop any that don't return (seems like you could just ping instead)
+
+	return the shortlist
+	**note that you never call a node twice
+
+
+STUFF YOU NEED TO SAVE:
+	the shortlist (prolly a slice)
+	nodes you've called (prolly a hash map?)
+
+CONCURRENCY:
+	So basically any time you access a data structure (shorlist, our local contact list, the called nodes hash map, etc.) you need to use a channel. A channel is a FIFO queue which prevents two simultaneous accesses. 
+
+	I'm thinking the best way to do this is to use handler functions like john suggested. What I'm envisioning is a channel per data structure (so atm, at least three channels). You would delcare these to be fields of the kademlia struct so you'll need to modify the kademlia initialization function to make them when you make a new instance.
+
+	So for example, right now in DoPing we have a call to Update. Instead, make a new function UpdateHandler() and replace Update with it. For UpdateHandler, pass a *Contact like in Update, but all UpdateHandler will do is push the *Contact into a channel. Then in the actual Update, we'll want update to loop forever and select on the channel (I think). This way, we don't actually call Update, we just call it once when we start up our kademlia instance and it'll will just run automatically when it senses there's something in the channel.
+
+	In the xlattice spec there's mention of different levels of parallelism...let's stick with strict parallelism for now and see if we can get that working...the other types seem like a pain. 
+
+
+	

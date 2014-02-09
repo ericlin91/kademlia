@@ -16,6 +16,7 @@ type Kademlia struct {
     Info *Contact
     Contact_table *Table
     Bin  map[ID][]int
+    //ADD CHANNELS
 }
 
 func NewKademlia(host net.IP, port uint16) *Kademlia {
@@ -50,7 +51,7 @@ func NewTable(owner ID) *Table {
    //update Contact_table
 func (k *Kademlia) Update(node *Contact) {
     //first check you aren't adding yourself
-    //if node.NodeID.Compare(k.Contact_table.NodeID) != 0 {
+    if node.NodeID.Compare(k.Contact_table.NodeID) != 0 {
         //how to initialize to nil?
         var node_holder *list.Element = nil
 
@@ -84,7 +85,7 @@ func (k *Kademlia) Update(node *Contact) {
         } else{
             log.Fatal("Update failed.\n")
         }
-    //}
+    }
 }
 
 //func (k *Kademlia) DoPing(address string) int {
@@ -202,3 +203,5 @@ func (k *Kademlia) GetContact(searchid ID) *Contact {
         return node_holder.Value.(*Contact)
 	}
 }
+
+I
