@@ -40,7 +40,7 @@ func main() {
     port,err := strconv.ParseUint(ip_and_port[1], 0, 16)
 
     fmt.Printf("kademlia starting up!\n")
-    kadem := kademlia.NewKademlia(ip[1], uint16(port))
+    kadem := kademlia.NewKademlia(ip[0], uint16(port))
 
     rpc.Register(kadem)
     rpc.HandleHTTP()

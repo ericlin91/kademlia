@@ -203,5 +203,3 @@ func (k *Kademlia) GetContact(searchid ID) *Contact {
         return node_holder.Value.(*Contact)
 	}
 }
-
-I
