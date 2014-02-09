@@ -184,6 +184,41 @@ func (k *Kademlia) DoFindNode(remoteContact *Contact, searchKey ID) []FoundNode 
     return res.Nodes
 }
 
+
+//Needs testing
+func (k *Kademlia) DoFindValue(remoteContact *Contact, Key ID) ([]int, []FoundNode) {
+	address := remoteContact.Host.String() + ":" + strconv.Itoa(int(remoteContact.Port))
+
+	client, err := rpc.DialHTTP("tcp",address)
+	if err != nil {
+		log.Fatal("DialHTTP:", err)
+	}
+
+	//request
+	req := new(FindValueRequest)
+	req.MsgID = NewRandomID()
+	req.Sender = *k.Info
+	req.Key = Key
+
+	var res FindValueResult
+	err = client.Call("Kademlia.FindValue", req, &res)
+	if err != nil {
+		log.Fatal("Call: ", err)
+	}
+
+	k.Update(remoteContact)
+
+	if res.Value != nil {
+		fmt.Printf("No matching value!")
+	} else {
+		fmt.Printf("Match found!")
+	}
+	//Is there a way to output one or the other datatype?  
+	//Not sure so just outputting both with a message to the user
+	return res.Value, res.Nodes
+}
+
+
 func (k *Kademlia) GetContact(searchid ID) *Contact {
 	var node_holder *list.Element = nil
 	bucket_num := searchid.Xor(k.Contact_table.NodeID).PrefixLen()
