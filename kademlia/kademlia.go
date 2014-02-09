@@ -15,7 +15,7 @@ import(
 type Kademlia struct {
     Info *Contact
     Contact_table *Table
-    Bin  map[ID][]byte
+    Bin  map[ID][]int
 }
 
 func NewKademlia(host net.IP, port uint16) *Kademlia {
@@ -25,7 +25,7 @@ func NewKademlia(host net.IP, port uint16) *Kademlia {
     ret.Info.Host = host
     ret.Info.Port = port
     ret.Contact_table = NewTable(ret.Info.NodeID)
-    ret.Bin = make(map[ID][]byte)
+    ret.Bin = make(map[ID][]int)
     return ret
 }
 
@@ -50,7 +50,7 @@ func NewTable(owner ID) *Table {
    //update Contact_table
 func (k *Kademlia) Update(node *Contact) {
     //first check you aren't adding yourself
-    if node.NodeID.Compare(k.Contact_table.NodeID) != 0 {
+    //if node.NodeID.Compare(k.Contact_table.NodeID) != 0 {
         //how to initialize to nil?
         var node_holder *list.Element = nil
 
@@ -84,7 +84,7 @@ func (k *Kademlia) Update(node *Contact) {
         } else{
             log.Fatal("Update failed.\n")
         }
-    }
+    //}
 }
 
 //func (k *Kademlia) DoPing(address string) int {
@@ -123,7 +123,7 @@ func (k *Kademlia) DoPing(rhost net.IP, port uint16) int {
     return ack
 }
 
-func (k *Kademlia) DoStore(remoteContact *Contact, Key ID, Value []byte) int {
+func (k *Kademlia) DoStore(remoteContact *Contact, StoredKey ID, StoredValue []int) int {
 	ack := 0
 	address := remoteContact.Host.String() +":"+ strconv.Itoa(int(remoteContact.Port))
 
@@ -136,6 +136,8 @@ func (k *Kademlia) DoStore(remoteContact *Contact, Key ID, Value []byte) int {
     req := new(StoreRequest)
     req.MsgID = NewRandomID()
     req.Sender = *k.Info
+    req.Key = StoredKey
+    req.Value = StoredValue
 
     var res StoreResult
     err = client.Call("Kademlia.Store", req, &res)
@@ -181,12 +183,11 @@ func (k *Kademlia) DoFindNode(remoteContact *Contact, searchKey ID) []FoundNode 
     return res.Nodes
 }
 
-func (k *Kademlia) GetContact(searchid ID) {
+func (k *Kademlia) GetContact(searchid ID) *Contact {
 	var node_holder *list.Element = nil
 	bucket_num := searchid.Xor(k.Contact_table.NodeID).PrefixLen()
 	search_bucket := k.Contact_table.Buckets[bucket_num]
 	for i := search_bucket.Front(); i != nil; i = i.Next() {
-
 		
 		if i.Value.(*Contact).NodeID.Equals(searchid) {
 			node_holder = i
@@ -196,7 +197,8 @@ func (k *Kademlia) GetContact(searchid ID) {
 
 	if node_holder == nil{
 		fmt.Printf("ERR\n")
+        return nil
 	}	else{
-		fmt.Printf("%v%v\n", node_holder.Value.(*Contact).Host, node_holder.Value.(*Contact).Port)
+        return node_holder.Value.(*Contact)
 	}
 }

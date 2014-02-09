@@ -5,6 +5,7 @@ package kademlia
 
 import "net"
 import "sort"
+import "fmt"
 
 
 // Host identification.
@@ -40,7 +41,7 @@ type StoreRequest struct {
     Sender Contact
     MsgID ID
     Key ID
-    Value []byte
+    Value []int
 }
 
 type StoreResult struct {
@@ -50,6 +51,7 @@ type StoreResult struct {
 
 func (k *Kademlia) Store(req StoreRequest, res *StoreResult) error {
     k.Bin[req.Key] = req.Value
+    fmt.Println(k.Bin[req.Key])
     k.Update(&req.Sender)
     res.MsgID = CopyID(req.MsgID)
     return nil

@@ -36,11 +36,11 @@ func main() {
 
     //catch ip and port of listener so we can pass it to others
     ip_and_port := strings.Split(listenStr,":")
-    ip := net.ParseIP(ip_and_port[0])
+    ip, err := net.LookupIP(ip_and_port[0])
     port,err := strconv.ParseUint(ip_and_port[1], 0, 16)
 
     fmt.Printf("kademlia starting up!\n")
-    kadem := kademlia.NewKademlia(ip, uint16(port))
+    kadem := kademlia.NewKademlia(ip[1], uint16(port))
 
     rpc.Register(kadem)
     rpc.HandleHTTP()
@@ -96,13 +96,32 @@ func main() {
             }
 
         case "store":
+            input_id, err := kademlia.FromString(cmd_arr[1])
+            key_id, err := kademlia.FromString(cmd_arr[2])
+            if err != nil {
+                log.Fatal("Input error: ", err)
+            }
+            store_loc := kadem.GetContact(input_id)
+
+            teststore := []int{2,99}
+
+            kadem.DoStore(store_loc, key_id, teststore)
 
         case "find_node":
-            //kadem.DoFindNode(cmd_arr[1], cmd_arr[2])
+            input_id, err := kademlia.FromString(cmd_arr[1])
+            key_id, err := kademlia.FromString(cmd_arr[2])
+            if err != nil {
+                log.Fatal("Input error: ", err)
+            }
+            contact := kadem.GetContact(input_id)
+
+            kadem.DoFindNode(contact, key_id)       
+
         case "find_value":
 
         case "whoami":
             fmt.Println(kadem.Info.NodeID.AsString())
+
         case "local_find_value":
             input_id, err := kademlia.FromString(cmd_arr[1])
             if err != nil {
@@ -114,12 +133,16 @@ func main() {
             } else {
                 fmt.Println(map_data)
             }
+
         case "get_contact":
             input_id, err := kademlia.FromString(cmd_arr[1])
             if err != nil {
                 log.Fatal("Contact: ", err)
             }
-            kadem.GetContact(input_id)
+            fnode := kadem.GetContact(input_id)
+            fmt.Println("IP Address: ", fnode.Host.String())
+            fmt.Println("Port: ", fnode.Port)
+
         case "iterativeStore":
 
         case "iterativeFindNode":
@@ -127,11 +150,7 @@ func main() {
         case "iterativeFindValue":
 
         }
-        //read from input
-        //bufio.Reader
-        //switch on cmd
-        //case "ping"
-        //  doPing()        
+      
     }
 }
 
