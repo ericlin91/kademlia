@@ -9,6 +9,7 @@ import(
 	"net/rpc"
 	"log"
 	"fmt"
+    "sort"
 )
 
 // Core Kademlia type. You can put whatever state you want in this.
@@ -238,3 +239,97 @@ func (k *Kademlia) GetContact(searchid ID) *Contact {
         return node_holder.Value.(*Contact)
 	}
 }
+
+type ByDistanceFN []FoundNode
+
+func (a ByDistanceFN) Swap(i,j int)       {a[i], a[j] = a[j], a[i]}
+func (a ByDistanceFN) Len() int           {return len(a)}
+func (a ByDistanceFN) Less(i, j int) bool {return a[i].NodeID.Less(a[j].NodeID)}
+
+
+func (k *Kademlia) IterativeFindNode(remoteContact *Contact, searchKey ID) []FoundNode {
+    // updated 20-element list containing ranked closest nodes
+    short_list := make([]FoundNode,20)
+    // temp_list made to hold doFindNode results without overwriting short_list
+    temp_list  := make([]FoundNode,20)
+    // new_list the result of combining short_list and temp_list
+    new_list  := make([]FoundNode,40)
+    checkedMap := make(map[ID]int)
+
+    // fill short_list with first DoFindNode call and mark first contact node as checked
+    checkedMap[remoteContact.NodeID] = 1
+    short_list = k.DoFindNode(remoteContact, searchKey)
+
+    // set ClosestNode to the first element of short_list
+    closestNode := short_list[0]
+
+    i := 0
+    loopFlag := true
+    for loopFlag == true {
+        if checkedMap[short_list[i].NodeID] == 1 {
+            i++
+        } else if i >= len(short_list) {
+            loopFlag = false
+        } else {
+            checkedMap[short_list[i].NodeID] = 1
+            var nodeToSearch Contact
+            nodeToSearch.NodeID = short_list[i].NodeID
+            nodeToSearch.Port = short_list[i].Port
+            hostconverted, err := net.LookupIP(short_list[i].IPAddr)
+            if err != nil {
+                log.Fatal("IP conversion: ", err)
+            }
+            nodeToSearch.Host = hostconverted[1]
+
+            // temp_list holds RPC findNode call result for node short_list[i]
+            temp_list = k.DoFindNode(&nodeToSearch, searchKey)
+
+            // combine lists, remove duplicates, sort, trim to 20 elements
+            new_list = append(short_list, temp_list...)
+            new_list = removeDuplicates(new_list)
+            sort.Sort(ByDistanceFN(new_list))
+            short_list = new_list[0:19]
+
+            // check if closestNode is the same. If so -> exit loop
+            if short_list[0].NodeID.Compare(closestNode.NodeID) == 0 {
+                loopFlag = false
+            } else {
+                // update closestNode
+                closestNode = short_list[0]
+            }
+        }
+    }
+    return short_list
+}
+
+func removeDuplicates(nodeList []FoundNode) []FoundNode {
+    resultSlice := make([]FoundNode,40)
+    for i:=0; i<len(nodeList); i++ {
+        found := false
+        for j:=0; j<len(resultSlice); j++ {
+            if nodeList[i].NodeID.Compare(resultSlice[j].NodeID) == 0 {
+                found = true
+            }
+        }
+        if found == false {
+            resultSlice[i] = nodeList[i]
+        }
+    }
+    return resultSlice
+}
+    // Loop starts:
+    //     Ask 3 (alpha) nodes from the shortlist to run Findnode
+    //     Put the k nodes returned from those Findnode calls in the shortlist if they haven't been called 
+    //         Basically make sure no repeats in the shortlist, sort the shortlist, trim to 20 nodes
+    //     Update the closest node if a closer one is returned
+
+    //     Stop the loop after successfully calling 20 (k) nodes
+    //     OR
+    //     none of the nodes returned in one iteration of the loop is closer than the current closest node
+    // Loop ends.
+
+    // If the loop ends because of the second condition, ask all the nodes in the shortlist that you haven't called to run Findnode, drop any that don't return (seems like you could just ping instead)
+
+    // return the shortlist
+    // **note that you never call a node twice
+
