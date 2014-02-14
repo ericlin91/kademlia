@@ -10,6 +10,7 @@ import(
 	"log"
 	"fmt"
     "sort"
+    "time"
 )
 
 // Core Kademlia type. You can put whatever state you want in this.
@@ -17,6 +18,7 @@ type Kademlia struct {
     Info *Contact
     Contact_table *Table
     Bin  map[ID][]int
+    Table_ch chan int
     //ADD CHANNELS
 }
 
@@ -28,6 +30,7 @@ func NewKademlia(host net.IP, port uint16) *Kademlia {
     ret.Info.Port = port
     ret.Contact_table = NewTable(ret.Info.NodeID)
     ret.Bin = make(map[ID][]int)
+    Table_ch = make(chan int)
     return ret
 }
 
@@ -51,6 +54,9 @@ func NewTable(owner ID) *Table {
 
    //update Contact_table
 func (k *Kademlia) Update(node *Contact) {
+    //grab lock for the contact table
+    Table_ch <- 1
+
     //first check you aren't adding yourself
     if node.NodeID.Compare(k.Contact_table.NodeID) != 0 {
         //how to initialize to nil?
@@ -87,6 +93,9 @@ func (k *Kademlia) Update(node *Contact) {
             log.Fatal("Update failed.\n")
         }
     }
+
+    //release lock
+    <-Table_ch
 }
 
 //func (k *Kademlia) DoPing(address string) int {
@@ -159,7 +168,7 @@ func (k *Kademlia) DoStore(remoteContact *Contact, StoredKey ID, StoredValue []i
     return ack
 }
 
-func (k *Kademlia) DoFindNode(remoteContact *Contact, searchKey ID) []FoundNode {
+func (k *Kademlia) DoFindNode(remoteContact *Contact, searchKey ID) ([]FoundNode, error) {
 	//ack := 0
 	address := remoteContact.Host.String() +":"+ strconv.Itoa(int(remoteContact.Port))
 
@@ -182,7 +191,7 @@ func (k *Kademlia) DoFindNode(remoteContact *Contact, searchKey ID) []FoundNode 
 
     k.Update(remoteContact)
 
-    return res.Nodes
+    return res.Nodes, err
 }
 
 
@@ -222,6 +231,9 @@ func (k *Kademlia) DoFindValue(remoteContact *Contact, Key ID) ([]int, []FoundNo
 
 func (k *Kademlia) GetContact(searchid ID) *Contact {
 	var node_holder *list.Element = nil
+
+    //get lock for contact_table
+    Table_ch <- 1
 	bucket_num := searchid.Xor(k.Contact_table.NodeID).PrefixLen()
 	search_bucket := k.Contact_table.Buckets[bucket_num]
 	for i := search_bucket.Front(); i != nil; i = i.Next() {
@@ -231,6 +243,8 @@ func (k *Kademlia) GetContact(searchid ID) *Contact {
 			break
 		}
 	}
+    //release lock
+    <-Table_ch
 
 	if node_holder == nil{
 		fmt.Printf("ERR\n")
@@ -285,7 +299,7 @@ func (k *Kademlia) IterativeFindNode(remoteContact *Contact, searchKey ID) []Fou
             temp_list = k.DoFindNode(&nodeToSearch, searchKey)
 
             // combine lists, remove duplicates, sort, trim to 20 elements
-            new_list = append(short_list, temp_list...)
+            new_list = Append(short_list, temp_list...)
             new_list = removeDuplicates(new_list)
             sort.Sort(ByDistanceFN(new_list))
             short_list = new_list[0:19]
@@ -333,3 +347,125 @@ func removeDuplicates(nodeList []FoundNode) []FoundNode {
     // return the shortlist
     // **note that you never call a node twice
 
+func (k *Kademlia) IterativeFindNode(remoteContact *Contact, searchKey ID) []FoundNode {
+    // updated 20-element list containing ranked closest nodes
+    short_list := make([]FoundNode,20)
+
+    //hashmap to check if nodes have been searched yet
+    checkedMap := make(map[ID]int)
+
+    // fill short_list with first DoFindNode call and mark first contact node as checked
+    checkedMap[remoteContact.NodeID] = 1
+    short_list = k.DoFindNode(remoteContact, searchKey)
+
+    // set ClosestNode to the first element of short_list
+    closestNode := short_list[0]
+
+    //make quit channel
+    quit_ch := make(chan int)
+
+    //make thread channel
+    make_thread_ch := make(chan int)
+
+    //run thread handler
+    go k.DataHandler()
+
+    //thread creation loop
+    i := 0
+    loopFlag := true
+    for loopFlag == true {
+        select{
+        default:
+            make_thread_ch <- 1
+            time.Sleep(300 * time.Millisecond)
+        case <-quit_ch:
+            loopFlag == false
+            quit_ch -> 1
+        }
+    }
+    return short_list
+}
+
+
+//have separate datahandler function so all shortlist/map accesses in one place
+func (k *Kademlia) DataHandler(make_thread_ch chan int, quit_ch chan int, short_list *[]FoundNode) {
+    
+    //make rcv_thread channel
+    rcv_thread := make(chan []FoundNode)
+
+    //make error rcv channel
+    err_ch := make(chan int)
+
+
+    //thread return counter
+    var ret_counter int = 0 
+
+    //loop till told to quit
+    for{
+        select{
+            //told to make a thread
+            case <-make_thread_ch:
+                i := 0
+                loopFlag := true
+                for loopFlag == true {
+                    if checkedMap[short_list[i].NodeID] == 1 { //case that node has been accessed
+                        i++
+                    } else if i >= len(short_list) { //went through whole shortlist
+                        loopFlag = false
+                    } else { //send probe to node
+                        //set status as attempted to contact
+                        checkedMap[short_list[i].NodeID] = 1
+
+                        //set up call
+                        var nodeToSearch Contact
+                        nodeToSearch.NodeID = short_list[i].NodeID
+                        nodeToSearch.Port = short_list[i].Port
+                        hostconverted, err := net.LookupIP(short_list[i].IPAddr)
+                        if err != nil {
+                            log.Fatal("IP conversion: ", err)
+                        }
+                        nodeToSearch.Host = hostconverted[1]
+
+                        //run findnode in a new thread
+                        go k.FindNodeHandler(&nodeToSearch, searchKey, rcv_thread)   
+                        loopFlag = false                
+                    }
+                }
+
+            //thread returns successfully
+            case temp_list <- rcv_thread:
+                // combine lists, remove duplicates, sort, trim to 20 elements
+                new_list := make([]FoundNode,40)
+                new_list = Append(short_list, temp_list...)
+                new_list = removeDuplicates(new_list)
+                sort.Sort(ByDistanceFN(new_list))
+                short_list = new_list[0:19]
+
+                // check if closestNode is the same. If so -> exit loop
+                if short_list[0].NodeID.Compare(closestNode.NodeID) == 0 {
+                    loopFlag = false
+                } else {
+                    // update closestNode
+                    closestNode = short_list[0]
+                }
+                //increment return counter
+                ret_counter++
+            case <- err_ch:
+                //increment return counter
+                ret_counter++
+            case <-quit_ch:
+        }
+    }
+}
+
+func (k *Kademlia) FindNodeHandler(node *Contact, searchKey ID, rcv_thread chan []FoundNode, err_ch chan int) {
+    //return results of findnode through channel
+    ret_list := make([]FoundNode,20)
+    ret_list, err := k.DoFindNode(node, searchKey)
+
+    if(err!=nil){
+        rcv_thread <- ret_list
+    }else{
+        err_ch <- 1
+    }
+}

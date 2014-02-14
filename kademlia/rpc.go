@@ -91,6 +91,9 @@ func (k *Kademlia) FindNode(req FindNodeRequest, res *FindNodeResult) error {
     counter := 0
     bucketcounter := 0
 
+    //get lock for contact_table
+    k.Table_ch <- 1
+
     bucket := k.Contact_table.Buckets[bucket_num]
     for i := bucket.Front(); i != nil; i = i.Next() {
         bucket_slice[counter] = i.Value.(*Contact)
@@ -129,6 +132,8 @@ func (k *Kademlia) FindNode(req FindNodeRequest, res *FindNodeResult) error {
         flag = bucket_num - bucketcounter < 0 && bucket_num + bucketcounter > 159
 
     }
+    //release lock for contact_table
+    <-k.Table_ch
 
     //Sort the slice by Xor distance to the input nodeID
     sort.Sort(ByDistance(bucket_slice))
@@ -167,6 +172,7 @@ type FindValueResult struct {
     Err error
 }
 
+//NEED TO PUT IN CONTACT_TABLE LOCKS
 func (k *Kademlia) FindValue(req FindValueRequest, res *FindValueResult) error {
     
     map_value := k.Bin[req.Key]
