@@ -36,6 +36,8 @@ func NewKademlia(host net.IP, port uint16) *Kademlia {
 
 const ListSize = 10 //how many Buckets?
 
+const alpha = 3
+
 type Table struct {
 	NodeID ID
 	Buckets [IDBytes*8]*list.List
@@ -169,24 +171,28 @@ func (k *Kademlia) DoStore(remoteContact *Contact, StoredKey ID, StoredValue []i
 }
 
 func (k *Kademlia) DoFindNode(remoteContact *Contact, searchKey ID) ([]FoundNode, error) {
-	//ack := 0
-	address := remoteContact.Host.String() +":"+ strconv.Itoa(int(remoteContact.Port))
 
-	client, err := rpc.DialHTTP("tcp", address)
-    if err != nil {
-        log.Fatal("DialHTTP: ", err)
-    }
-
-    //fill out request
+    //fill out request, initialize request and response
     req := new(FindNodeRequest)
     req.MsgID = NewRandomID()
     req.Sender = *k.Info
     req.NodeID = searchKey
-
     var res FindNodeResult
+
+    //establish connection
+	address := remoteContact.Host.String() +":"+ strconv.Itoa(int(remoteContact.Port))
+	client, err := rpc.DialHTTP("tcp", address)
+    if err != nil {
+        log.Printf("DialHTTP: ", err)
+        return res.Nodes, err
+    }
+
+    //make rpc call
     err = client.Call("Kademlia.FindNode", req, &res)
     if err != nil {
-        log.Fatal("Call: ", err)
+        log.Printf("Call: ", err)
+        return res.Nodes, err
+
     }
 
     k.Update(remoteContact)
@@ -261,6 +267,149 @@ func (a ByDistanceFN) Len() int           {return len(a)}
 func (a ByDistanceFN) Less(i, j int) bool {return a[i].NodeID.Less(a[j].NodeID)}
 
 
+
+
+func removeDuplicates(nodeList []FoundNode) []FoundNode {
+    resultSlice := make([]FoundNode,40)
+    for i:=0; i<len(nodeList); i++ {
+        found := false
+        for j:=0; j<len(resultSlice); j++ {
+            if nodeList[i].NodeID.Compare(resultSlice[j].NodeID) == 0 {
+                found = true
+            }
+        }
+        if found == false {
+            resultSlice[i] = nodeList[i]
+        }
+    }
+    return resultSlice
+}
+
+
+
+
+func (k *Kademlia) IterativeFindNode(remoteContact *Contact, searchKey ID) []FoundNode {
+    // updated 20-element list containing ranked closest nodes
+    short_list := make([]FoundNode,20)
+
+    //hashmap to check if nodes have been searched yet
+    checkedMap := make(map[ID]int)
+
+    // fill short_list with first DoFindNode call and mark first contact node as checked
+    checkedMap[remoteContact.NodeID] = 1
+    short_list = k.DoFindNode(remoteContact, searchKey)
+
+    // set ClosestNode to the first element of short_list
+    closestNode := short_list[0]
+
+    //changed closest node flag
+    var close_node_flag int = 0
+    
+    //these channels are each fed into FindNodeHandler
+    //make rcv_thread channel
+    rcv_thread := make(chan []FoundNode)
+    //make error rcv channel
+    err_ch := make(chan *Contact)
+
+    //thread return counter
+    var ret_counter int = 0 
+
+    loopFlag := true
+    //loop till told to quit
+    for loopFlag==true {
+
+        select{
+            //told to make a thread
+            default:
+                i := 0
+                listFlag := true
+                for listFlag == true {
+                    if checkedMap[short_list[i].NodeID] == 1 { //case that node has been accessed
+                        i++
+                    } else if i >= len(short_list) { //went through whole shortlist
+                        //break out of both inner and outer loops
+                        listFlag = false
+                        loopFlag = false
+                    } else { //send probe to node
+                        //set status as attempted to contact
+                        checkedMap[short_list[i].NodeID] = 1
+
+                        //set up call
+                        var nodeToSearch Contact
+                        nodeToSearch.NodeID = short_list[i].NodeID
+                        nodeToSearch.Port = short_list[i].Port
+                        hostconverted, err := net.LookupIP(short_list[i].IPAddr)
+                        if err != nil {
+                            log.Fatal("IP conversion: ", err)
+                        }
+                        nodeToSearch.Host = hostconverted[1]
+
+                        //run findnode in a new thread
+                        go k.FindNodeHandler(&nodeToSearch, searchKey, rcv_thread, err_ch)   
+                        loopFlag = false                
+                    }
+                }
+                time.Sleep(300 * time.Millisecond)
+
+            //thread returns successfully
+            case temp_list <- rcv_thread:
+                // combine lists, remove duplicates, sort, trim to 20 elements
+                new_list := make([]FoundNode,40)
+                new_list = append(short_list, temp_list...)
+                new_list = removeDuplicates(new_list)
+                sort.Sort(ByDistanceFN(new_list))
+                short_list = new_list[0:19]
+
+                // check if closestNode is the same. If not, update 
+                if short_list[0].NodeID.Compare(closestNode.NodeID) != 0 {
+                    closestNode = short_list[0]
+                    close_node_flag = 1
+                }
+
+                //increment return counter
+                ret_counter++
+
+            case err_node <- err_ch:
+                //remove from shortlist
+                for j:=0; j<len(short_list); j++ {
+                    if short_list[j].NodeID.Compare(err_node.NodeID) == 0 {
+                        short_list = append(short_list[:j], short_list[j+1:])
+                    }
+                    break
+                }
+                //increment return counter
+                ret_counter++
+        }
+
+        //enters if every cycle, check closest node not changing condition
+        if ret_counter%alpha == 0 && ret_counter!=0 {
+            if close_node_flag == 0 {
+                //ping everything in shortlist
+                loopFlag = false
+            } else { 
+                //reset flag
+                close_node_flag = 0
+            }
+        }
+    }
+}
+
+func (k *Kademlia) FindNodeHandler(node *Contact, searchKey ID, rcv_thread chan []FoundNode, err_ch chan *Contact) {
+    //return results of findnode through channel
+    ret_list := make([]FoundNode,20)
+    ret_list, err := k.DoFindNode(node, searchKey)
+
+    if(err!=nil){
+        rcv_thread <- ret_list
+    }else{
+        err_ch <- node
+    }
+}
+
+
+/*
+single thread iterative findnode
+
 func (k *Kademlia) IterativeFindNode(remoteContact *Contact, searchKey ID) []FoundNode {
     // updated 20-element list containing ranked closest nodes
     short_list := make([]FoundNode,20)
@@ -314,158 +463,4 @@ func (k *Kademlia) IterativeFindNode(remoteContact *Contact, searchKey ID) []Fou
         }
     }
     return short_list
-}
-
-func removeDuplicates(nodeList []FoundNode) []FoundNode {
-    resultSlice := make([]FoundNode,40)
-    for i:=0; i<len(nodeList); i++ {
-        found := false
-        for j:=0; j<len(resultSlice); j++ {
-            if nodeList[i].NodeID.Compare(resultSlice[j].NodeID) == 0 {
-                found = true
-            }
-        }
-        if found == false {
-            resultSlice[i] = nodeList[i]
-        }
-    }
-    return resultSlice
-}
-    // Loop starts:
-    //     Ask 3 (alpha) nodes from the shortlist to run Findnode
-    //     Put the k nodes returned from those Findnode calls in the shortlist if they haven't been called 
-    //         Basically make sure no repeats in the shortlist, sort the shortlist, trim to 20 nodes
-    //     Update the closest node if a closer one is returned
-
-    //     Stop the loop after successfully calling 20 (k) nodes
-    //     OR
-    //     none of the nodes returned in one iteration of the loop is closer than the current closest node
-    // Loop ends.
-
-    // If the loop ends because of the second condition, ask all the nodes in the shortlist that you haven't called to run Findnode, drop any that don't return (seems like you could just ping instead)
-
-    // return the shortlist
-    // **note that you never call a node twice
-
-func (k *Kademlia) IterativeFindNode(remoteContact *Contact, searchKey ID) []FoundNode {
-    // updated 20-element list containing ranked closest nodes
-    short_list := make([]FoundNode,20)
-
-    //hashmap to check if nodes have been searched yet
-    checkedMap := make(map[ID]int)
-
-    // fill short_list with first DoFindNode call and mark first contact node as checked
-    checkedMap[remoteContact.NodeID] = 1
-    short_list = k.DoFindNode(remoteContact, searchKey)
-
-    // set ClosestNode to the first element of short_list
-    closestNode := short_list[0]
-
-    //make quit channel
-    quit_ch := make(chan int)
-
-    //make thread channel
-    make_thread_ch := make(chan int)
-
-    //run thread handler
-    go k.DataHandler()
-
-    //thread creation loop
-    i := 0
-    loopFlag := true
-    for loopFlag == true {
-        select{
-        default:
-            make_thread_ch <- 1
-            time.Sleep(300 * time.Millisecond)
-        case <-quit_ch:
-            loopFlag == false
-            quit_ch -> 1
-        }
-    }
-    return short_list
-}
-
-
-//have separate datahandler function so all shortlist/map accesses in one place
-func (k *Kademlia) DataHandler(make_thread_ch chan int, quit_ch chan int, short_list *[]FoundNode) {
-    
-    //make rcv_thread channel
-    rcv_thread := make(chan []FoundNode)
-
-    //make error rcv channel
-    err_ch := make(chan int)
-
-
-    //thread return counter
-    var ret_counter int = 0 
-
-    //loop till told to quit
-    for{
-        select{
-            //told to make a thread
-            case <-make_thread_ch:
-                i := 0
-                loopFlag := true
-                for loopFlag == true {
-                    if checkedMap[short_list[i].NodeID] == 1 { //case that node has been accessed
-                        i++
-                    } else if i >= len(short_list) { //went through whole shortlist
-                        loopFlag = false
-                    } else { //send probe to node
-                        //set status as attempted to contact
-                        checkedMap[short_list[i].NodeID] = 1
-
-                        //set up call
-                        var nodeToSearch Contact
-                        nodeToSearch.NodeID = short_list[i].NodeID
-                        nodeToSearch.Port = short_list[i].Port
-                        hostconverted, err := net.LookupIP(short_list[i].IPAddr)
-                        if err != nil {
-                            log.Fatal("IP conversion: ", err)
-                        }
-                        nodeToSearch.Host = hostconverted[1]
-
-                        //run findnode in a new thread
-                        go k.FindNodeHandler(&nodeToSearch, searchKey, rcv_thread)   
-                        loopFlag = false                
-                    }
-                }
-
-            //thread returns successfully
-            case temp_list <- rcv_thread:
-                // combine lists, remove duplicates, sort, trim to 20 elements
-                new_list := make([]FoundNode,40)
-                new_list = Append(short_list, temp_list...)
-                new_list = removeDuplicates(new_list)
-                sort.Sort(ByDistanceFN(new_list))
-                short_list = new_list[0:19]
-
-                // check if closestNode is the same. If so -> exit loop
-                if short_list[0].NodeID.Compare(closestNode.NodeID) == 0 {
-                    loopFlag = false
-                } else {
-                    // update closestNode
-                    closestNode = short_list[0]
-                }
-                //increment return counter
-                ret_counter++
-            case <- err_ch:
-                //increment return counter
-                ret_counter++
-            case <-quit_ch:
-        }
-    }
-}
-
-func (k *Kademlia) FindNodeHandler(node *Contact, searchKey ID, rcv_thread chan []FoundNode, err_ch chan int) {
-    //return results of findnode through channel
-    ret_list := make([]FoundNode,20)
-    ret_list, err := k.DoFindNode(node, searchKey)
-
-    if(err!=nil){
-        rcv_thread <- ret_list
-    }else{
-        err_ch <- 1
-    }
-}
+}*/

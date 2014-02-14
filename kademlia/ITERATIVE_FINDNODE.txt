@@ -1,5 +1,16 @@
 ITERATIVE FINDNODE
 
+
+THINGS LEFT TO DO
+Ping all nodes in shortlist when ending in closet node not changing case
+make rpcs report errors
+make rpc handlers catch errors
+write rest of the iterative stuff
+write cmd line handlers
+
+
+
+
 FLOW:
 	Call findnode
 	Save the returned 20 nodes in a shortlist
