@@ -93,6 +93,13 @@ func main() {
                 }
 
                 err = kadem.DoPing(host[1], uint16(port))                    
+            } else {
+                id_to_ping,err := kademlia.FromString(cmd_arr[1])
+                if err != nil {
+                    log.Printf("Ping setup error: ", err)
+                }
+                contact_to_ping := kadem.GetContact(id_to_ping)
+                err = kadem.DoPing(contact_to_ping.Host, contact_to_ping.Port)
             }
 
         case "store":
@@ -118,6 +125,18 @@ func main() {
             // node_list, err := kadem.DoFindNode(contact, key_id)       
 
         case "find_value":
+            /*input_id, err := kademlia.FromString(cmd_arr[1])
+            key_id, err := kademlia.FromString(cmd_arr[2])
+            if err != nil {
+                log.Fatal("Find Value setup error: ", err)
+            }
+            id_contact := kadem.GetContact(input_id)
+            value_return, nodes_return := kadem.DoFindValue(id_contact, key_id)
+            if nodes_return != nil {
+                //fmt.Printf(nodes_return)
+            } else {
+                //fmt.Printf(value_return)
+            }*/
 
         case "whoami":
             fmt.Println(kadem.Info.NodeID.AsString())
@@ -144,13 +163,29 @@ func main() {
             fmt.Println("Port: ", fnode.Port)
 
         case "iterativeStore":
+            /*key_id, err := kademlia.FromString(cmd_arr[1])
+            value_id, err := kademlia.FromString(cmd_arr[2])
+            if err != nil {
+                log.Fatal("Iterative Store setup error: ", err)
+            }
+            last_node := kadem.IterativeStore(key_id, value_id)*/
 
         case "iterativeFindNode":
+            /*input_id, err := kademlia.FromString(cmd_arr[1])
+            if err != nil {
+                log.Printf("Iterative Find Node setup error: ", err)
+            }
+            found_nodes, err := kadem.IterativeFindNode(input_id)
+            fmt.Printf(found_nodes)*/
 
         case "iterativeFindValue":
-
+            /*key_id, err := kademlia.FromString(cmd_arr[1])
+            if err != nil {
+                log.Printf("Iterative Find Value setup error :", err)
+            }
+            value_node, value := kadem.iterativeFindValue(key_id)
+            fmt.Printf("%v %v\n", value_node, value)*/
         }
-      
     }
 }
 
