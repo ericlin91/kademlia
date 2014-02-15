@@ -43,7 +43,7 @@ type StoreRequest struct {
     Sender Contact
     MsgID ID
     Key ID
-    Value []int
+    Value []byte
 }
 
 type StoreResult struct {
@@ -180,7 +180,7 @@ type FindValueRequest struct {
 // FindNodeResult.
 type FindValueResult struct {
     MsgID ID
-    Value []int
+    Value []byte
     Nodes []FoundNode
     Err error
 }

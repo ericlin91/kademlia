@@ -18,7 +18,7 @@ import(
 type Kademlia struct {
     Info *Contact
     Contact_table *Table
-    Bin  map[ID][]int
+    Bin  map[ID][]byte
     Table_ch chan int
     //ADD CHANNELS
 }
@@ -30,7 +30,7 @@ func NewKademlia(host net.IP, port uint16) *Kademlia {
     ret.Info.Host = host
     ret.Info.Port = port
     ret.Contact_table = NewTable(ret.Info.NodeID)
-    ret.Bin = make(map[ID][]int)
+    ret.Bin = make(map[ID][]byte)
     ret.Table_ch = make(chan int)
     return ret
 }
@@ -155,7 +155,7 @@ func (k *Kademlia) DoPing(rhost net.IP, port uint16) error {
 }
 
 
-func (k *Kademlia) DoStore(remoteContact *Contact, StoredKey ID, StoredValue []int) error {
+func (k *Kademlia) DoStore(remoteContact *Contact, StoredKey ID, StoredValue []byte) error {
 
     //establish tcp
 	address := remoteContact.Host.String() +":"+ strconv.Itoa(int(remoteContact.Port))
@@ -244,7 +244,7 @@ func (k *Kademlia) DoFindNode(remoteContact *Contact, searchKey ID) ([]FoundNode
 
 
 //Needs testing
-func (k *Kademlia) DoFindValue(remoteContact *Contact, Key ID) ([]int, []FoundNode) {
+func (k *Kademlia) DoFindValue(remoteContact *Contact, Key ID) ([]byte, []FoundNode) {
 	address := remoteContact.Host.String() + ":" + strconv.Itoa(int(remoteContact.Port))
 
 	client, err := rpc.DialHTTP("tcp",address)
@@ -330,7 +330,7 @@ func removeDuplicates(nodeList []FoundNode) []FoundNode {
 
 
 
-func (k *Kademlia) IterativeFindNode(remoteContact *Contact, searchKey ID) ([]FoundNode, error) {
+func (k *Kademlia) IterativeFindNode(searchKey ID) ([]FoundNode, error) {
     
     // updated 20-element list containing ranked closest nodes
     short_list := make([]FoundNode,20)
@@ -341,9 +341,17 @@ func (k *Kademlia) IterativeFindNode(remoteContact *Contact, searchKey ID) ([]Fo
     //hashmap to check if nodes have been searched yet
     checkedMap := make(map[ID]int)
 
-    // fill short_list with first DoFindNode call and mark first contact node as checked
-    checkedMap[remoteContact.NodeID] = 1
-    short_list, err := k.DoFindNode(remoteContact, searchKey)
+
+    // execute FindNode rpc to initialize the short_list from our own k buckets
+    req := new(FindNodeRequest)
+    req.MsgID = NewRandomID()
+    req.Sender = *k.Info
+    req.NodeID = searchKey
+    var res FindNodeResult
+
+    err := k.FindNode(*req, &res)
+    short_list = res.Nodes
+
     if err != nil {
         log.Printf("IterativeFindNode could not make initial call: ", err)
         return nil, err
@@ -503,7 +511,31 @@ func (k *Kademlia) FindNodeHandler(node *Contact, searchKey ID, rcv_thread chan 
     }
 }
 
-func (k *Kademlia) IterativeStore (key )
+func (k *Kademlia) IterativeStore (key ID, value []byte) error {
+    // call iterativeFindNode
+    found_node_list, err := k.IterativeFindNode(key)
+
+    if err != nil {
+        return err
+    }
+
+    // iterate through foundnodelist, convert to contact pointers and call doStore
+    for j:= 0; j<len(found_node_list); j++ {
+        contact_ptr := new(Contact)
+        hostconverted, err := net.LookupIP(found_node_list[j].IPAddr)
+        contact_ptr.Host = hostconverted[1]
+        contact_ptr.NodeID = found_node_list[j].NodeID
+        contact_ptr.Port = found_node_list[j].Port
+
+        // call doStore on converted contact pointer
+        err = k.DoStore(contact_ptr, key, value)
+        if err != nil {
+            return err
+        }
+    }
+
+    return nil
+}
 
 /*
 single thread iterative findnode

@@ -103,7 +103,7 @@ func main() {
             }
             store_loc := kadem.GetContact(input_id)
 
-            teststore := []int{2,99}
+            teststore := []byte{2,99}
 
             err = kadem.DoStore(store_loc, key_id, teststore)
 
