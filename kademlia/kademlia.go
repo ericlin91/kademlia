@@ -408,7 +408,7 @@ func (k *Kademlia) IterativeFindNode(remoteContact *Contact, searchKey ID) ([]Fo
                 new_list = append(short_list, temp_list...)
                 new_list = removeDuplicates(new_list)
                 sort.Sort(ByDistanceFN(new_list))
-                short_list = new_list[0:19]
+                short_list = new_list[0:20]
 
                 // check if closestNode is the same. If not, update 
                 if short_list[0].NodeID.Compare(closestNode.NodeID) != 0 {
@@ -435,6 +435,35 @@ func (k *Kademlia) IterativeFindNode(remoteContact *Contact, searchKey ID) ([]Fo
         if ret_counter%Alpha == 0 && ret_counter!=0 {
             if close_node_flag == 0 {
                 //ping everything in shortlist
+
+                // done_ping_flag set to 1 when the entire short_list has been pinged
+                done_ping_flag := 0
+                j := 0
+
+                for done_ping_flag == 0 {
+                    if checkedMap[short_list[j].NodeID] == 0 {
+                        //ping it
+                        hostconverted, err := net.LookupIP(short_list[j].IPAddr)
+                        err = k.DoPing(hostconverted[1], short_list[j].Port)
+                        if err != nil{
+                            //remove node from list
+                            //WILL THIS WORK? Basically copying everything in slice except failed contact.
+                            //will loop run correctly with re-indexing?
+                            short_list = append(short_list[:j], short_list[j+1:]...)
+                        } else {
+                            // if successfully check with no error, move on
+                            j++
+                        }
+                    } else {
+                        // if that node has already been checked, move on
+                        j++
+                    }
+                    if j == len(short_list) {
+                        done_ping_flag = 1
+                    }               
+                }
+
+                /*
                 for j:=0; j<len(short_list); j++ {
                     if checkedMap[short_list[j].NodeID] == 0 {
                         //ping it
@@ -445,12 +474,11 @@ func (k *Kademlia) IterativeFindNode(remoteContact *Contact, searchKey ID) ([]Fo
                             //WILL THIS WORK? Basically copying everything in slice except failed contact.
                             //will loop run correctly with re-indexing?
                             short_list = append(short_list[:j], short_list[j+1:]...)
-                            j++
+                            j--
                         } 
-                    } else{
-                        continue
                     }                    
                 }
+                */
                 //end function
                 loopFlag = false
             } else { 
@@ -468,13 +496,14 @@ func (k *Kademlia) FindNodeHandler(node *Contact, searchKey ID, rcv_thread chan 
     ret_list := make([]FoundNode,20)
     ret_list, err := k.DoFindNode(node, searchKey)
 
-    if(err!=nil){
+    if(err==nil){
         rcv_thread <- ret_list
     }else{
         err_ch <- node
     }
 }
 
+func (k *Kademlia) IterativeStore (key )
 
 /*
 single thread iterative findnode
