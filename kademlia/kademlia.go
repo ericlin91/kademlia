@@ -11,6 +11,7 @@ import(
 	"fmt"
     "sort"
     "time"
+    "errors"
 )
 
 // Core Kademlia type. You can put whatever state you want in this.
@@ -30,13 +31,13 @@ func NewKademlia(host net.IP, port uint16) *Kademlia {
     ret.Info.Port = port
     ret.Contact_table = NewTable(ret.Info.NodeID)
     ret.Bin = make(map[ID][]int)
-    Table_ch = make(chan int)
+    ret.Table_ch = make(chan int)
     return ret
 }
 
 const ListSize = 10 //how many Buckets?
 
-const alpha = 3
+const Alpha = 3
 
 type Table struct {
 	NodeID ID
@@ -54,14 +55,15 @@ func NewTable(owner ID) *Table {
 	return Contact_table
 }
 
-   //update Contact_table
-func (k *Kademlia) Update(node *Contact) {
+//update Contact_table
+func (k *Kademlia) Update(node *Contact) error {
     //grab lock for the contact table
-    Table_ch <- 1
+    k.Table_ch <- 1
 
     //first check you aren't adding yourself
     if node.NodeID.Compare(k.Contact_table.NodeID) != 0 {
-        //how to initialize to nil?
+        
+        //holder for contact from list
         var node_holder *list.Element = nil
 
         //identify correct bucket
@@ -85,64 +87,82 @@ func (k *Kademlia) Update(node *Contact) {
             //if oldest responds, do nothing
             //else drop oldest, add new to end
             //Ping(///front of list);
-            //address := node.Host.String() +":"+ strconv.Itoa(int(node.Port))
-            if ack := k.DoPing(node.Host, node.Port); ack == 0{
+            if err := k.DoPing(node.Host, node.Port); err == nil{
                 bucket.Remove(bucket.Front())
                 bucket.PushBack(node)
-            }   
-        
+            }         
         } else{
-            log.Fatal("Update failed.\n")
+            err := errors.New("Update failed.\n")
+            <-k.Table_ch
+            return err
         }
     }
 
     //release lock
-    <-Table_ch
+    <-k.Table_ch
+    return nil
 }
 
-//func (k *Kademlia) DoPing(address string) int {
-func (k *Kademlia) DoPing(rhost net.IP, port uint16) int {
+//error handling done, should be good 
+func (k *Kademlia) DoPing(rhost net.IP, port uint16) error {
 
-    ack := 0
+    //set up tcp
     address := rhost.String() +":"+ strconv.Itoa(int(port))
-                    fmt.Println(address)
-
     client, err := rpc.DialHTTP("tcp", address)
     if err != nil {
-        log.Fatal("DialHTTP: ", err)
+        log.Printf("DialHTTP: ", err)
+        return err
     }
 
-    //fill out ping
+    //fill out ping, initialize pong
     ping := new(Ping)
     ping.MsgID = NewRandomID()
     ping.Sender = *k.Info
-
     var pong Pong
+
     err = client.Call("Kademlia.Ping", ping, &pong)
     if err != nil {
-        log.Fatal("Call: ", err)
+        log.Printf("Call: ", err)
+        return err
     }
+
     //run update with contact from pong struct
-    k.Update(&pong.Sender)
+    err = k.Update(&pong.Sender)
+    if err != nil {
+        log.Printf("Update error: ", err)
+        return err
+    }
 
     //print confirmation
     fmt.Println("ping msgID: "+ ping.MsgID.AsString())
     fmt.Println("pong msgID: "+ pong.MsgID.AsString())
-    fmt.Println("pinging")
-    if ping.MsgID.Compare(pong.MsgID) == 0 {
-        ack = 1
+
+    //error handling and update
+    if ping.MsgID.Compare(pong.MsgID) != 0 {
+        err = errors.New("Ping and pong don't match.\n")
+        log.Printf("Ping error: ", err)
+        return err
+    } else{
+        //run update with contact from pong struct
+        err = k.Update(&pong.Sender)
+        if err != nil {
+            log.Printf("Update error: ", err)
+            return err
+        }
     }
 
-    return ack
+    return nil
 }
 
-func (k *Kademlia) DoStore(remoteContact *Contact, StoredKey ID, StoredValue []int) int {
-	ack := 0
-	address := remoteContact.Host.String() +":"+ strconv.Itoa(int(remoteContact.Port))
 
+func (k *Kademlia) DoStore(remoteContact *Contact, StoredKey ID, StoredValue []int) error {
+
+    //establish tcp
+	address := remoteContact.Host.String() +":"+ strconv.Itoa(int(remoteContact.Port))
 	client, err := rpc.DialHTTP("tcp", address)
     if err != nil {
-        log.Fatal("DialHTTP: ", err)
+        log.Printf("DialHTTP: ", err)
+        return err
     }
 
     //fill out request
@@ -151,23 +171,34 @@ func (k *Kademlia) DoStore(remoteContact *Contact, StoredKey ID, StoredValue []i
     req.Sender = *k.Info
     req.Key = StoredKey
     req.Value = StoredValue
-
     var res StoreResult
+
+    //call rpc
     err = client.Call("Kademlia.Store", req, &res)
     if err != nil {
-        log.Fatal("Call: ", err)
+        log.Printf("Call: ", err)
+        return err
     }
 
     //print confirmation
     log.Printf("req msgID: %s\n", req.MsgID.AsString())
     log.Printf("res msgID: %s\n", res.MsgID.AsString())
 
-    if req.MsgID.Compare(res.MsgID) == 0 {
-    	ack = 1
-    	k.Update(remoteContact)
+    //error handling and update
+    if req.MsgID.Compare(res.MsgID) != 0 {
+        err = errors.New("Message IDs don't match.\n")
+        log.Printf("Store error: ", err)
+        return err
+    } else{
+        //run update with contact from pong struct
+        err = k.Update(remoteContact)
+        if err != nil {
+            log.Printf("Update error: ", err)
+            return err
+        }
     }
 
-    return ack
+    return nil
 }
 
 func (k *Kademlia) DoFindNode(remoteContact *Contact, searchKey ID) ([]FoundNode, error) {
@@ -184,20 +215,31 @@ func (k *Kademlia) DoFindNode(remoteContact *Contact, searchKey ID) ([]FoundNode
 	client, err := rpc.DialHTTP("tcp", address)
     if err != nil {
         log.Printf("DialHTTP: ", err)
-        return res.Nodes, err
+        return nil, err
     }
 
     //make rpc call
     err = client.Call("Kademlia.FindNode", req, &res)
     if err != nil {
         log.Printf("Call: ", err)
-        return res.Nodes, err
-
+        return nil, err
     }
 
-    k.Update(remoteContact)
+    //error handling and update
+    if req.MsgID.Compare(res.MsgID) != 0 {
+        err = errors.New("Message IDs don't match.\n")
+        log.Printf("FindNode error: ", err)
+        return nil, err
+    } else{
+        //run update with contact from pong struct
+        err = k.Update(remoteContact)
+        if err != nil {
+            log.Printf("Update error: ", err)
+            return nil, err
+        }
+    }
 
-    return res.Nodes, err
+    return res.Nodes, nil
 }
 
 
@@ -239,7 +281,7 @@ func (k *Kademlia) GetContact(searchid ID) *Contact {
 	var node_holder *list.Element = nil
 
     //get lock for contact_table
-    Table_ch <- 1
+    k.Table_ch <- 1
 	bucket_num := searchid.Xor(k.Contact_table.NodeID).PrefixLen()
 	search_bucket := k.Contact_table.Buckets[bucket_num]
 	for i := search_bucket.Front(); i != nil; i = i.Next() {
@@ -250,7 +292,7 @@ func (k *Kademlia) GetContact(searchid ID) *Contact {
 		}
 	}
     //release lock
-    <-Table_ch
+    <-k.Table_ch
 
 	if node_holder == nil{
 		fmt.Printf("ERR\n")
@@ -288,16 +330,24 @@ func removeDuplicates(nodeList []FoundNode) []FoundNode {
 
 
 
-func (k *Kademlia) IterativeFindNode(remoteContact *Contact, searchKey ID) []FoundNode {
+func (k *Kademlia) IterativeFindNode(remoteContact *Contact, searchKey ID) ([]FoundNode, error) {
+    
     // updated 20-element list containing ranked closest nodes
     short_list := make([]FoundNode,20)
+
+    // // temp list to store findnode returned lists
+    // temp_list := make([]FoundNode,20)
 
     //hashmap to check if nodes have been searched yet
     checkedMap := make(map[ID]int)
 
     // fill short_list with first DoFindNode call and mark first contact node as checked
     checkedMap[remoteContact.NodeID] = 1
-    short_list = k.DoFindNode(remoteContact, searchKey)
+    short_list, err := k.DoFindNode(remoteContact, searchKey)
+    if err != nil {
+        log.Printf("IterativeFindNode could not make initial call: ", err)
+        return nil, err
+    }
 
     // set ClosestNode to the first element of short_list
     closestNode := short_list[0]
@@ -352,7 +402,7 @@ func (k *Kademlia) IterativeFindNode(remoteContact *Contact, searchKey ID) []Fou
                 time.Sleep(300 * time.Millisecond)
 
             //thread returns successfully
-            case temp_list <- rcv_thread:
+            case temp_list := <-rcv_thread:
                 // combine lists, remove duplicates, sort, trim to 20 elements
                 new_list := make([]FoundNode,40)
                 new_list = append(short_list, temp_list...)
@@ -369,11 +419,11 @@ func (k *Kademlia) IterativeFindNode(remoteContact *Contact, searchKey ID) []Fou
                 //increment return counter
                 ret_counter++
 
-            case err_node <- err_ch:
+            case err_node := <- err_ch:
                 //remove from shortlist
                 for j:=0; j<len(short_list); j++ {
                     if short_list[j].NodeID.Compare(err_node.NodeID) == 0 {
-                        short_list = append(short_list[:j], short_list[j+1:])
+                        short_list = append(short_list[:j], short_list[j+1:]...)
                     }
                     break
                 }
@@ -382,9 +432,26 @@ func (k *Kademlia) IterativeFindNode(remoteContact *Contact, searchKey ID) []Fou
         }
 
         //enters if every cycle, check closest node not changing condition
-        if ret_counter%alpha == 0 && ret_counter!=0 {
+        if ret_counter%Alpha == 0 && ret_counter!=0 {
             if close_node_flag == 0 {
                 //ping everything in shortlist
+                for j:=0; j<len(short_list); j++ {
+                    if checkedMap[short_list[j].NodeID] == 0 {
+                        //ping it
+                        hostconverted, err := net.LookupIP(short_list[j].IPAddr)
+                        err = k.DoPing(hostconverted[1], short_list[j].Port)
+                        if err != nil{
+                            //remove node from list
+                            //WILL THIS WORK? Basically copying everything in slice except failed contact.
+                            //will loop run correctly with re-indexing?
+                            short_list = append(short_list[:j], short_list[j+1:]...)
+                            j++
+                        } 
+                    } else{
+                        continue
+                    }                    
+                }
+                //end function
                 loopFlag = false
             } else { 
                 //reset flag
@@ -392,6 +459,8 @@ func (k *Kademlia) IterativeFindNode(remoteContact *Contact, searchKey ID) []Fou
             }
         }
     }
+
+    return short_list, nil
 }
 
 func (k *Kademlia) FindNodeHandler(node *Contact, searchKey ID, rcv_thread chan []FoundNode, err_ch chan *Contact) {

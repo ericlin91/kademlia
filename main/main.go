@@ -72,6 +72,7 @@ func main() {
 
     //kadem.DoPing(ip, 7890)
 
+    //command line interface
     for {
         //bio := bufio.NewReader(os.Stdin)
         scanner := bufio.NewScanner(bufio.NewReader(os.Stdin))
@@ -80,6 +81,7 @@ func main() {
         cmd_arr := strings.Split(scanner.Text(), " ")
 
         switch cmd_arr[0] {
+
         case "ping":
             //case with host:port
             if host_port := strings.Split(cmd_arr[1], ":"); host_port[0] != cmd_arr[1] {
@@ -87,35 +89,33 @@ func main() {
                 host, err := net.LookupIP(host_port[0])
 
                 if err != nil {
-                    log.Fatal("ParseUint: ", err)
+                    log.Printf("Ping setup error: ", err)
                 }
 
-                if kadem.DoPing(host[1], uint16(port) ) == 0 {
-                    fmt.Println("Ping failed.")
-                }
+                err = kadem.DoPing(host[1], uint16(port))                    
             }
 
         case "store":
             input_id, err := kademlia.FromString(cmd_arr[1])
             key_id, err := kademlia.FromString(cmd_arr[2])
             if err != nil {
-                log.Fatal("Input error: ", err)
+                log.Printf("Store setup error: ", err)
             }
             store_loc := kadem.GetContact(input_id)
 
             teststore := []int{2,99}
 
-            kadem.DoStore(store_loc, key_id, teststore)
+            err = kadem.DoStore(store_loc, key_id, teststore)
 
         case "find_node":
-            input_id, err := kademlia.FromString(cmd_arr[1])
-            key_id, err := kademlia.FromString(cmd_arr[2])
-            if err != nil {
-                log.Fatal("Input error: ", err)
-            }
-            contact := kadem.GetContact(input_id)
+            // input_id, err := kademlia.FromString(cmd_arr[1])
+            // key_id, err := kademlia.FromString(cmd_arr[2])
+            // if err != nil {
+            //     log.Printf("FindNode setup error: ", err)
+            // }
+            // contact := kadem.GetContact(input_id)
 
-            kadem.DoFindNode(contact, key_id)       
+            // node_list, err := kadem.DoFindNode(contact, key_id)       
 
         case "find_value":
 

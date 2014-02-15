@@ -2,11 +2,10 @@ ITERATIVE FINDNODE
 
 
 THINGS LEFT TO DO
-Ping all nodes in shortlist when ending in closet node not changing case
 make rpcs report errors
-make rpc handlers catch errors
 write rest of the iterative stuff
 write cmd line handlers
+what happens if you findnode yourself?
 
 
 
