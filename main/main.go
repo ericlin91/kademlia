@@ -171,12 +171,16 @@ func main() {
             last_node := kadem.IterativeStore(key_id, value_id)*/
 
         case "iterativeFindNode":
-            /*input_id, err := kademlia.FromString(cmd_arr[1])
+            input_id, err := kademlia.FromString(cmd_arr[1])
             if err != nil {
                 log.Printf("Iterative Find Node setup error: ", err)
             }
             found_nodes, err := kadem.IterativeFindNode(input_id)
-            fmt.Printf(found_nodes)*/
+            
+            for j := 0; j < len(found_nodes); j++ {
+                fmt.Println(found_nodes[j].NodeID.AsString())
+            }
+
 
         case "iterativeFindValue":
             /*key_id, err := kademlia.FromString(cmd_arr[1])

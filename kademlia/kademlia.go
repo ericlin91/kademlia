@@ -537,6 +537,176 @@ func (k *Kademlia) IterativeStore (key ID, value []byte) error {
     return nil
 }
 
+
+func (k *Kademlia) iterativeFindValue (key ID) ([]byte, error) {
+/*
+    // updated 20-element list containing ranked closest nodes
+    short_list := make([]FoundNode,20)
+
+    // // temp list to store findnode returned lists
+    // temp_list := make([]FoundNode,20)
+
+    //hashmap to check if nodes have been searched yet
+    checkedMap := make(map[ID]int)
+
+
+    // execute FindNode rpc to initialize the short_list from our own k buckets
+    req := new(FindValueRequest)
+    req.MsgID = NewRandomID()
+    req.Sender = *k.Info
+    req.NodeID = searchKey
+    var res FindNodeResult
+
+    err := k.FindValue(*req, &res)
+    short_list = res.Nodes
+
+    if err != nil {
+        log.Printf("IterativeFindNode could not make initial call: ", err)
+        return nil, err
+    }
+
+    // set ClosestNode to the first element of short_list
+    closestNode := short_list[0]
+
+    //changed closest node flag
+    var close_node_flag int = 0
+    
+    //these channels are each fed into FindNodeHandler
+    //make rcv_thread channel
+    rcv_thread := make(chan []FoundNode)
+    //make error rcv channel
+    err_ch := make(chan *Contact)
+
+    //thread return counter
+    var ret_counter int = 0 
+
+    loopFlag := true
+    //loop till told to quit
+    for loopFlag==true {
+
+        select{
+            //told to make a thread
+            default:
+                i := 0
+                listFlag := true
+                for listFlag == true {
+                    if checkedMap[short_list[i].NodeID] == 1 { //case that node has been accessed
+                        i++
+                    } else if i >= len(short_list) { //went through whole shortlist
+                        //break out of both inner and outer loops
+                        listFlag = false
+                        loopFlag = false
+                    } else { //send probe to node
+                        //set status as attempted to contact
+                        checkedMap[short_list[i].NodeID] = 1
+
+                        //set up call
+                        var nodeToSearch Contact
+                        nodeToSearch.NodeID = short_list[i].NodeID
+                        nodeToSearch.Port = short_list[i].Port
+                        hostconverted, err := net.LookupIP(short_list[i].IPAddr)
+                        if err != nil {
+                            log.Fatal("IP conversion: ", err)
+                        }
+                        nodeToSearch.Host = hostconverted[1]
+
+                        //run findnode in a new thread
+                        go k.FindNodeHandler(&nodeToSearch, searchKey, rcv_thread, err_ch)   
+                        loopFlag = false                
+                    }
+                }
+                time.Sleep(300 * time.Millisecond)
+
+            //thread returns successfully
+            case temp_list := <-rcv_thread:
+                // combine lists, remove duplicates, sort, trim to 20 elements
+                new_list := make([]FoundNode,40)
+                new_list = append(short_list, temp_list...)
+                new_list = removeDuplicates(new_list)
+                sort.Sort(ByDistanceFN(new_list))
+                short_list = new_list[0:20]
+
+                // check if closestNode is the same. If not, update 
+                if short_list[0].NodeID.Compare(closestNode.NodeID) != 0 {
+                    closestNode = short_list[0]
+                    close_node_flag = 1
+                }
+
+                //increment return counter
+                ret_counter++
+
+            case err_node := <- err_ch:
+                //remove from shortlist
+                for j:=0; j<len(short_list); j++ {
+                    if short_list[j].NodeID.Compare(err_node.NodeID) == 0 {
+                        short_list = append(short_list[:j], short_list[j+1:]...)
+                    }
+                    break
+                }
+                //increment return counter
+                ret_counter++
+        }
+
+        //enters if every cycle, check closest node not changing condition
+        if ret_counter%Alpha == 0 && ret_counter!=0 {
+            if close_node_flag == 0 {
+                //ping everything in shortlist
+
+                // done_ping_flag set to 1 when the entire short_list has been pinged
+                done_ping_flag := 0
+                j := 0
+
+                for done_ping_flag == 0 {
+                    if checkedMap[short_list[j].NodeID] == 0 {
+                        //ping it
+                        hostconverted, err := net.LookupIP(short_list[j].IPAddr)
+                        err = k.DoPing(hostconverted[1], short_list[j].Port)
+                        if err != nil{
+                            //remove node from list
+                            //WILL THIS WORK? Basically copying everything in slice except failed contact.
+                            //will loop run correctly with re-indexing?
+                            short_list = append(short_list[:j], short_list[j+1:]...)
+                        } else {
+                            // if successfully check with no error, move on
+                            j++
+                        }
+                    } else {
+                        // if that node has already been checked, move on
+                        j++
+                    }
+                    if j == len(short_list) {
+                        done_ping_flag = 1
+                    }               
+                }
+
+                /*
+                for j:=0; j<len(short_list); j++ {
+                    if checkedMap[short_list[j].NodeID] == 0 {
+                        //ping it
+                        hostconverted, err := net.LookupIP(short_list[j].IPAddr)
+                        err = k.DoPing(hostconverted[1], short_list[j].Port)
+                        if err != nil{
+                            //remove node from list
+                            //WILL THIS WORK? Basically copying everything in slice except failed contact.
+                            //will loop run correctly with re-indexing?
+                            short_list = append(short_list[:j], short_list[j+1:]...)
+                            j--
+                        } 
+                    }                    
+                }
+                
+                //end function
+                loopFlag = false
+            } else { 
+                //reset flag
+                close_node_flag = 0
+            }
+        }
+    }
+    */
+    return nil, nil
+}
+
 /*
 single thread iterative findnode
 
