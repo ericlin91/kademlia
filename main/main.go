@@ -48,9 +48,14 @@ func main() {
     if err != nil {
         log.Fatal("Listen: ", err)
     }
+    log.Printf("ping msgIDa:\n")
 
     // Serve forever.
     go http.Serve(l, nil)
+    log.Printf("ping msgIDb:\n")
+
+    //run bucketaccess
+    go kadem.BucketAccess()
 
     // Confirm our server is up with a PING request and then exit.
     // Your code should loop forever, reading instructions from stdin and
@@ -59,10 +64,14 @@ func main() {
     if err != nil {
         log.Fatal("DialHTTP: ", err)
     }
+        log.Printf("ping msgIDc:\n")
+
     ping := new(kademlia.Ping)
     ping.MsgID = kademlia.NewRandomID()
     var pong kademlia.Pong
     err = client.Call("Kademlia.Ping", ping, &pong)
+        log.Printf("ping msgIDd:\n")
+
     if err != nil {
         log.Fatal("Call: ", err)
     }
@@ -92,7 +101,13 @@ func main() {
                     log.Printf("Ping setup error: ", err)
                 }
 
-                err = kadem.DoPing(host[1], uint16(port))                    
+                ip_index := 0
+                if strings.Contains(cmd_arr[1], "localhost") {
+                    ip_index = 1
+                } else {
+                    ip_index = 0
+                }
+                err = kadem.DoPing(host[ip_index], uint16(port))                    
             } else {
                 id_to_ping,err := kademlia.FromString(cmd_arr[1])
                 if err != nil {
@@ -110,19 +125,20 @@ func main() {
             }
             store_loc := kadem.GetContact(input_id)
 
-            teststore := []byte{2,99}
+            var teststore []byte = nil
 
             err = kadem.DoStore(store_loc, key_id, teststore)
 
         case "find_node":
-            // input_id, err := kademlia.FromString(cmd_arr[1])
-            // key_id, err := kademlia.FromString(cmd_arr[2])
-            // if err != nil {
-            //     log.Printf("FindNode setup error: ", err)
-            // }
-            // contact := kadem.GetContact(input_id)
+            input_id, err := kademlia.FromString(cmd_arr[1])
+            key_id, err := kademlia.FromString(cmd_arr[2])
+            if err != nil {
+                log.Printf("FindNode setup error: ", err)
+            }
+            contact := kadem.GetContact(input_id)
 
-            // node_list, err := kadem.DoFindNode(contact, key_id)       
+            node_list, err := kadem.DoFindNode(contact, key_id)
+            fmt.Println(node_list[0].NodeID.AsString())       
 
         case "find_value":
             /*input_id, err := kademlia.FromString(cmd_arr[1])
@@ -159,6 +175,7 @@ func main() {
                 log.Fatal("Contact: ", err)
             }
             fnode := kadem.GetContact(input_id)
+            fmt.Printf("fnode = %s\n", fnode.NodeID.AsString())
             fmt.Println("IP Address: ", fnode.Host.String())
             fmt.Println("Port: ", fnode.Port)
 

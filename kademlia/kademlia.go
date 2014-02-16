@@ -19,8 +19,12 @@ type Kademlia struct {
     Info *Contact
     Contact_table *Table
     Bin  map[ID][]byte
-    Table_ch chan int
-    //ADD CHANNELS
+    Update_ch chan *Contact
+    Update_err_ch chan error
+    FindNode_in_ch chan FindNodeRequest
+    FindNode_out_ch chan []*Contact
+    GetContact_in chan ID
+    GetContact_out chan *Contact
 }
 
 func NewKademlia(host net.IP, port uint16) *Kademlia {
@@ -31,7 +35,13 @@ func NewKademlia(host net.IP, port uint16) *Kademlia {
     ret.Info.Port = port
     ret.Contact_table = NewTable(ret.Info.NodeID)
     ret.Bin = make(map[ID][]byte)
-    ret.Table_ch = make(chan int)
+    ret.Update_ch = make(chan *Contact)
+    ret.Update_err_ch = make(chan error)
+    ret.FindNode_in_ch = make(chan FindNodeRequest)
+    ret.FindNode_out_ch = make(chan []*Contact)
+    ret.GetContact_in = make(chan ID)
+    ret.GetContact_out = make(chan *Contact)
+
     return ret
 }
 
@@ -56,9 +66,7 @@ func NewTable(owner ID) *Table {
 }
 
 //update Contact_table
-func (k *Kademlia) Update(node *Contact) error {
-    //grab lock for the contact table
-    k.Table_ch <- 1
+func (k *Kademlia) UpdateHandler(node *Contact) error {
 
     //first check you aren't adding yourself
     if node.NodeID.Compare(k.Contact_table.NodeID) != 0 {
@@ -93,14 +101,109 @@ func (k *Kademlia) Update(node *Contact) error {
             }         
         } else{
             err := errors.New("Update failed.\n")
-            <-k.Table_ch
+            //<-k.Table_ch
             return err
         }
     }
-
-    //release lock
-    <-k.Table_ch
     return nil
+}
+
+func (k *Kademlia) Update(node *Contact) error {
+    k.Update_ch <- node
+    err := <- k.Update_err_ch
+    return err
+}
+
+
+//concurrency k-bucket access handler
+func (k *Kademlia) BucketAccess() {
+    for{
+        select{
+            case newUpdate:= <- k.Update_ch: //pull contact from update channel
+                err := k.UpdateHandler(newUpdate)            
+                k.Update_err_ch <- err
+                
+            case newReq := <- k.FindNode_in_ch: //pull something from findnodew channel
+                bucket_slice := k.ReturnLocalBuckets(newReq)
+                k.FindNode_out_ch <- bucket_slice
+
+            case searchid := <- k.GetContact_in:
+
+                // takes NodeID, returns corresponding Contact Pointer
+                var node_holder *list.Element = nil
+                bucket_num := searchid.Xor(k.Contact_table.NodeID).PrefixLen()
+                search_bucket := k.Contact_table.Buckets[bucket_num]
+                for i := search_bucket.Front(); i != nil; i = i.Next() {
+                    
+                    if i.Value.(*Contact).NodeID.Equals(searchid) {
+                        node_holder = i
+                        break
+                    }
+                }
+                //push contact back
+                if node_holder != nil {
+
+                    k.GetContact_out <- node_holder.Value.(*Contact)
+
+                } else {
+                    k.GetContact_out <- nil
+                }
+        }
+    }
+}
+
+func (k *Kademlia) ReturnLocalBuckets(req FindNodeRequest) []*Contact{
+    //first get everything in the bucket the node requested would have gone in and put it in a FoundNode slice
+    bucket_num := req.NodeID.Xor(k.Contact_table.NodeID).PrefixLen()
+    bucket_slice := make([]*Contact,60)
+
+    //counter for how many contacts we have stored
+    counter := 0
+
+    //counter for how much plus/minus we go from our original bucket
+    bucketcounter := 0
+
+    bucket := k.Contact_table.Buckets[bucket_num]
+    for i := bucket.Front(); i != nil; i = i.Next() {
+        bucket_slice[counter] = i.Value.(*Contact)
+        counter++
+    }
+       
+    //Check for out of bounds
+    //this is a boolean, loop will run as long as it's false
+    flag := bucket_num - bucketcounter < 0 && bucket_num + bucketcounter > 159
+
+    //Then get everything from the bucket above and below unless you have 20 nodes already
+    for len(bucket_slice) < ListSize && flag == false{
+
+        //Get nodes from Buckets to the left
+        if bucket_num - bucketcounter >= 0 {
+            bucket = k.Contact_table.Buckets[bucket_num - bucketcounter]
+
+            for i := bucket.Front(); i != nil; i = i.Next() {
+                bucket_slice[counter] = i.Value.(*Contact)
+                counter++
+            }
+        }
+
+        //Get nodes from Buckets to the right
+        if bucket_num + bucketcounter <= 159 {
+            bucket = k.Contact_table.Buckets[bucket_num + bucketcounter]
+
+            for i := bucket.Front(); i != nil; i = i.Next() {
+                bucket_slice[counter] = i.Value.(*Contact)
+                counter++
+            }
+        }
+
+        //Increment bucket location counter
+        bucketcounter++
+
+        //update flag
+        flag = bucket_num - bucketcounter < 0 && bucket_num + bucketcounter > 159
+    }
+
+    return bucket_slice
 }
 
 //error handling done, should be good 
@@ -125,6 +228,8 @@ func (k *Kademlia) DoPing(rhost net.IP, port uint16) error {
         log.Printf("Call: ", err)
         return err
     }
+
+    fmt.Printf(pong.Sender.Host.String())
 
     //run update with contact from pong struct
     err = k.Update(&pong.Sender)
@@ -212,6 +317,7 @@ func (k *Kademlia) DoFindNode(remoteContact *Contact, searchKey ID) ([]FoundNode
 
     //establish connection
 	address := remoteContact.Host.String() +":"+ strconv.Itoa(int(remoteContact.Port))
+    fmt.Println(address)
 	client, err := rpc.DialHTTP("tcp", address)
     if err != nil {
         log.Printf("DialHTTP: ", err)
@@ -244,12 +350,13 @@ func (k *Kademlia) DoFindNode(remoteContact *Contact, searchKey ID) ([]FoundNode
 
 
 //Needs testing
-func (k *Kademlia) DoFindValue(remoteContact *Contact, Key ID) ([]byte, []FoundNode) {
+func (k *Kademlia) DoFindValue(remoteContact *Contact, Key ID) ([]byte, []FoundNode, error) {
 	address := remoteContact.Host.String() + ":" + strconv.Itoa(int(remoteContact.Port))
 
 	client, err := rpc.DialHTTP("tcp",address)
 	if err != nil {
-		log.Fatal("DialHTTP:", err)
+		log.Printf("DialHTTP:", err)
+        return nil, nil, err
 	}
 
 	//request
@@ -261,7 +368,8 @@ func (k *Kademlia) DoFindValue(remoteContact *Contact, Key ID) ([]byte, []FoundN
 	var res FindValueResult
 	err = client.Call("Kademlia.FindValue", req, &res)
 	if err != nil {
-		log.Fatal("Call: ", err)
+		log.Printf("Call: ", err)
+        return nil, nil, err
 	}
 
 	k.Update(remoteContact)
@@ -273,32 +381,22 @@ func (k *Kademlia) DoFindValue(remoteContact *Contact, Key ID) ([]byte, []FoundN
 	}
 	//Is there a way to output one or the other datatype?  
 	//Not sure so just outputting both with a message to the user
-	return res.Value, res.Nodes
+	return res.Value, res.Nodes, nil
 }
 
 
 func (k *Kademlia) GetContact(searchid ID) *Contact {
-	var node_holder *list.Element = nil
 
-    //get lock for contact_table
-    k.Table_ch <- 1
-	bucket_num := searchid.Xor(k.Contact_table.NodeID).PrefixLen()
-	search_bucket := k.Contact_table.Buckets[bucket_num]
-	for i := search_bucket.Front(); i != nil; i = i.Next() {
-		
-		if i.Value.(*Contact).NodeID.Equals(searchid) {
-			node_holder = i
-			break
-		}
-	}
-    //release lock
-    <-k.Table_ch
+    //push to BucketAccess
+    k.GetContact_in <- searchid
 
+    //pull back
+    node_holder := <- k.GetContact_out
 	if node_holder == nil{
 		fmt.Printf("ERR\n")
         return nil
 	}	else{
-        return node_holder.Value.(*Contact)
+        return node_holder
 	}
 }
 
@@ -504,10 +602,24 @@ func (k *Kademlia) FindNodeHandler(node *Contact, searchKey ID, rcv_thread chan 
     ret_list := make([]FoundNode,20)
     ret_list, err := k.DoFindNode(node, searchKey)
 
-    if(err==nil){
-        rcv_thread <- ret_list
-    }else{
+    if(err!=nil){
         err_ch <- node
+    }else{        
+        rcv_thread <- ret_list
+    }
+}
+
+func (k *Kademlia) FindValueHandler(node *Contact, searchKey ID, rcv_thread chan []FoundNode, err_ch chan *Contact) {
+    //return results of findnode through channel
+    ret_list := make([]FoundNode,20)
+    found_value, ret_list, err := k.DoFindValue(node, searchKey)
+
+    if(err!=nil){
+        err_ch <- node
+    } else if {
+
+    } else{        
+        rcv_thread <- ret_list
     }
 }
 
@@ -539,7 +651,7 @@ func (k *Kademlia) IterativeStore (key ID, value []byte) error {
 
 
 func (k *Kademlia) iterativeFindValue (key ID) ([]byte, error) {
-/*
+
     // updated 20-element list containing ranked closest nodes
     short_list := make([]FoundNode,20)
 
@@ -555,13 +667,17 @@ func (k *Kademlia) iterativeFindValue (key ID) ([]byte, error) {
     req.MsgID = NewRandomID()
     req.Sender = *k.Info
     req.NodeID = searchKey
-    var res FindNodeResult
+    var res FindValueResult
 
     err := k.FindValue(*req, &res)
+    if res.Value != nil {
+        return res.Value
+    }
+
     short_list = res.Nodes
 
     if err != nil {
-        log.Printf("IterativeFindNode could not make initial call: ", err)
+        log.Printf("IterativeFindValuecould not make initial call: ", err)
         return nil, err
     }
 
@@ -611,7 +727,7 @@ func (k *Kademlia) iterativeFindValue (key ID) ([]byte, error) {
                         nodeToSearch.Host = hostconverted[1]
 
                         //run findnode in a new thread
-                        go k.FindNodeHandler(&nodeToSearch, searchKey, rcv_thread, err_ch)   
+                        go k.FindValueHandler(&nodeToSearch, searchKey, rcv_thread, err_ch)   
                         loopFlag = false                
                     }
                 }
@@ -703,7 +819,7 @@ func (k *Kademlia) iterativeFindValue (key ID) ([]byte, error) {
             }
         }
     }
-    */
+    
     return nil, nil
 }
 
