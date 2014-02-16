@@ -25,6 +25,11 @@ type Kademlia struct {
     FindNode_out_ch chan []*Contact
     GetContact_in chan ID
     GetContact_out chan *Contact
+    Store_key chan ID
+    Store_val chan []byte 
+    FindVal_in chan ID 
+    FindVal_out chan []byte 
+
 }
 
 func NewKademlia(host net.IP, port uint16) *Kademlia {
@@ -41,6 +46,10 @@ func NewKademlia(host net.IP, port uint16) *Kademlia {
     ret.FindNode_out_ch = make(chan []*Contact)
     ret.GetContact_in = make(chan ID)
     ret.GetContact_out = make(chan *Contact)
+    ret.Store_key = make(chan ID)
+    ret.Store_val = make(chan []byte) 
+    ret.FindVal_in = make(chan ID) 
+    ret.FindVal_out = make(chan []byte) 
 
     return ret
 }
@@ -148,6 +157,30 @@ func (k *Kademlia) BucketAccess() {
                 } else {
                     k.GetContact_out <- nil
                 }
+            //store
+            case key := <- k.Store_key:
+                val := <- k.Store_val
+                k.Bin[key] = val
+
+            case key := <- k.FindVal_in:
+                map_value := k.Bin[key]
+                k.FindVal_out <- map_value
+        }
+    }
+}
+
+//concurrency Map access handler
+func (k *Kademlia) MapAccess() {
+    for{
+        select{
+            //store
+            case key := <- k.Store_key:
+                val := <- k.Store_val
+                k.Bin[key] = val
+            //findvalue
+            case key := <- k.FindVal_in:
+                map_value := k.Bin[key]
+                k.FindVal_out <- map_value
         }
     }
 }
@@ -433,9 +466,6 @@ func (k *Kademlia) IterativeFindNode(searchKey ID) ([]FoundNode, error) {
     // updated 20-element list containing ranked closest nodes
     short_list := make([]FoundNode,20)
 
-    // // temp list to store findnode returned lists
-    // temp_list := make([]FoundNode,20)
-
     //hashmap to check if nodes have been searched yet
     checkedMap := make(map[ID]int)
 
@@ -569,22 +599,6 @@ func (k *Kademlia) IterativeFindNode(searchKey ID) ([]FoundNode, error) {
                     }               
                 }
 
-                /*
-                for j:=0; j<len(short_list); j++ {
-                    if checkedMap[short_list[j].NodeID] == 0 {
-                        //ping it
-                        hostconverted, err := net.LookupIP(short_list[j].IPAddr)
-                        err = k.DoPing(hostconverted[1], short_list[j].Port)
-                        if err != nil{
-                            //remove node from list
-                            //WILL THIS WORK? Basically copying everything in slice except failed contact.
-                            //will loop run correctly with re-indexing?
-                            short_list = append(short_list[:j], short_list[j+1:]...)
-                            j--
-                        } 
-                    }                    
-                }
-                */
                 //end function
                 loopFlag = false
             } else { 
@@ -624,17 +638,18 @@ func (k *Kademlia) FindValueHandler(node *Contact, searchKey ID, rcv_value chan 
     }
 }
 
-func (k *Kademlia) IterativeStore(key ID, value []byte) error {
+func (k *Kademlia) IterativeStore(key ID, value []byte) (*Contact, error) {
     // call iterativeFindNode
     found_node_list, err := k.IterativeFindNode(key)
 
     if err != nil {
-        return err
+        return nil, err
     }
+        
+    contact_ptr := new(Contact)
 
     // iterate through foundnodelist, convert to contact pointers and call doStore
     for j:= 0; j<len(found_node_list); j++ {
-        contact_ptr := new(Contact)
         hostconverted, err := net.LookupIP(found_node_list[j].IPAddr)
         contact_ptr.Host = hostconverted[1]
         contact_ptr.NodeID = found_node_list[j].NodeID
@@ -643,21 +658,19 @@ func (k *Kademlia) IterativeStore(key ID, value []byte) error {
         // call doStore on converted contact pointer
         err = k.DoStore(contact_ptr, key, value)
         if err != nil {
-            return err
+            return nil, err
         }
+
     }
 
-    return nil
+    return contact_ptr, nil
 }
 
 
-func (k *Kademlia) iterativeFindValue(searchKey ID) ([]byte, *Contact, []FoundNode, error) {
+func (k *Kademlia) IterativeFindValue(searchKey ID) ([]byte, *Contact, []FoundNode, error) {
 
     // updated 20-element list containing ranked closest nodes
     short_list := make([]FoundNode,20)
-
-    // // temp list to store findnode returned lists
-    // temp_list := make([]FoundNode,20)
 
     //hashmap to check if nodes have been searched yet
     checkedMap := make(map[ID]int)
@@ -818,61 +831,3 @@ func (k *Kademlia) iterativeFindValue(searchKey ID) ([]byte, *Contact, []FoundNo
     
     return nil, nil, short_list, nil
 }
-
-/*
-single thread iterative findnode
-
-func (k *Kademlia) IterativeFindNode(remoteContact *Contact, searchKey ID) []FoundNode {
-    // updated 20-element list containing ranked closest nodes
-    short_list := make([]FoundNode,20)
-    // temp_list made to hold doFindNode results without overwriting short_list
-    temp_list  := make([]FoundNode,20)
-    // new_list the result of combining short_list and temp_list
-    new_list  := make([]FoundNode,40)
-    checkedMap := make(map[ID]int)
-
-    // fill short_list with first DoFindNode call and mark first contact node as checked
-    checkedMap[remoteContact.NodeID] = 1
-    short_list = k.DoFindNode(remoteContact, searchKey)
-
-    // set ClosestNode to the first element of short_list
-    closestNode := short_list[0]
-
-    i := 0
-    loopFlag := true
-    for loopFlag == true {
-        if checkedMap[short_list[i].NodeID] == 1 {
-            i++
-        } else if i >= len(short_list) {
-            loopFlag = false
-        } else {
-            checkedMap[short_list[i].NodeID] = 1
-            var nodeToSearch Contact
-            nodeToSearch.NodeID = short_list[i].NodeID
-            nodeToSearch.Port = short_list[i].Port
-            hostconverted, err := net.LookupIP(short_list[i].IPAddr)
-            if err != nil {
-                log.Fatal("IP conversion: ", err)
-            }
-            nodeToSearch.Host = hostconverted[1]
-
-            // temp_list holds RPC findNode call result for node short_list[i]
-            temp_list = k.DoFindNode(&nodeToSearch, searchKey)
-
-            // combine lists, remove duplicates, sort, trim to 20 elements
-            new_list = Append(short_list, temp_list...)
-            new_list = removeDuplicates(new_list)
-            sort.Sort(ByDistanceFN(new_list))
-            short_list = new_list[0:19]
-
-            // check if closestNode is the same. If so -> exit loop
-            if short_list[0].NodeID.Compare(closestNode.NodeID) == 0 {
-                loopFlag = false
-            } else {
-                // update closestNode
-                closestNode = short_list[0]
-            }
-        }
-    }
-    return short_list
-}*/
