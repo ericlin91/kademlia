@@ -113,6 +113,8 @@ func (k *Kademlia) FindNode(req FindNodeRequest, res *FindNodeResult) error {
 
     //Fill out result struct
     res.Nodes = FoundNodes
+    res.MsgID = CopyID(req.MsgID)
+
 
     if err := k.Update(&req.Sender); err != nil {
         return err
@@ -145,52 +147,17 @@ func (k *Kademlia) FindValue(req FindValueRequest, res *FindValueResult) error {
     if map_value != nil {
         res.Value = map_value
     } else {
-        bucket_num := k.Info.NodeID.Xor(k.Contact_table.NodeID).PrefixLen()
-        bucket_slice := make([]*Contact,60)
+        freq := new(FindNodeRequest)
+        freq.MsgID = req.MsgID
+        freq.Sender = req.Sender
+        freq.NodeID = req.Key
+        var fres = new(FindNodeResult)
+        k.FindNode(*freq, fres)
 
-        counter := 0
-        bucketcounter := 0
-
-        searching_bucket := k.Contact_table.Buckets[bucket_num]
-        for i := searching_bucket.Front(); i != nil; i = i.Next() {
-            bucket_slice[counter] = i.Value.(*Contact)
-            counter++
-        }
-
-        flag := bucket_num - bucketcounter < 0 && bucket_num + bucketcounter > 159
-
-        for len(bucket_slice)< 20 && flag == false {
-            if bucket_num - bucketcounter >= 0 {
-                searching_bucket = k.Contact_table.Buckets[bucket_num - bucketcounter]
-
-                for i := searching_bucket.Front(); i != nil; i = i.Next() {
-                    bucket_slice[counter] = i.Value.(*Contact)
-                    counter++
-                }
-            }
-
-            if bucket_num + bucketcounter <= 159 {
-                searching_bucket = k.Contact_table.Buckets[bucket_num + bucketcounter]
-
-                for i := searching_bucket.Front(); i != nil; i = i.Next() {
-                    bucket_slice[counter] = i.Value.(*Contact)
-                    counter++
-                }
-            }
-
-            bucketcounter++
-            flag = bucket_num - bucketcounter < 0 && bucket_num + bucketcounter > 159
-        }
-        sort.Sort(ByDistance(bucket_slice))
-        bucket_slice = bucket_slice[0:19]
-        FoundNodes := make([]FoundNode,60)
-
-        for i := 0; i<20; i++ {
-            FoundNodes[i].IPAddr = bucket_slice[i].Host.String()
-            FoundNodes[i].Port = bucket_slice[i].Port
-            FoundNodes[i].NodeID = bucket_slice[i].NodeID
-        }
-        res.Nodes = FoundNodes
+        res.Nodes = fres.Nodes
+        res.MsgID = CopyID(req.MsgID)
+        res.Err = nil
+        res.Value = nil
     }
 
 

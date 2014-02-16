@@ -374,7 +374,7 @@ func (k *Kademlia) DoFindValue(remoteContact *Contact, Key ID) ([]byte, []FoundN
 
 	k.Update(remoteContact)
 
-	if res.Value != nil {
+	if res.Value == nil {
 		fmt.Printf("No matching value!")
 	} else {
 		fmt.Printf("Match found!")
@@ -609,21 +609,22 @@ func (k *Kademlia) FindNodeHandler(node *Contact, searchKey ID, rcv_thread chan 
     }
 }
 
-func (k *Kademlia) FindValueHandler(node *Contact, searchKey ID, rcv_thread chan []FoundNode, err_ch chan *Contact) {
+func (k *Kademlia) FindValueHandler(node *Contact, searchKey ID, rcv_value chan []byte, node_with_value chan *Contact, rcv_thread chan []FoundNode, err_ch chan *Contact) {
     //return results of findnode through channel
     ret_list := make([]FoundNode,20)
     found_value, ret_list, err := k.DoFindValue(node, searchKey)
 
-    if(err!=nil){
+    if err!=nil {
         err_ch <- node
-    } else if {
-
+    } else if found_value != nil {
+        rcv_value <- found_value
+        node_with_value <- node
     } else{        
         rcv_thread <- ret_list
     }
 }
 
-func (k *Kademlia) IterativeStore (key ID, value []byte) error {
+func (k *Kademlia) IterativeStore(key ID, value []byte) error {
     // call iterativeFindNode
     found_node_list, err := k.IterativeFindNode(key)
 
@@ -650,7 +651,7 @@ func (k *Kademlia) IterativeStore (key ID, value []byte) error {
 }
 
 
-func (k *Kademlia) iterativeFindValue (key ID) ([]byte, error) {
+func (k *Kademlia) iterativeFindValue(searchKey ID) ([]byte, *Contact, []FoundNode, error) {
 
     // updated 20-element list containing ranked closest nodes
     short_list := make([]FoundNode,20)
@@ -666,19 +667,19 @@ func (k *Kademlia) iterativeFindValue (key ID) ([]byte, error) {
     req := new(FindValueRequest)
     req.MsgID = NewRandomID()
     req.Sender = *k.Info
-    req.NodeID = searchKey
+    //req.NodeID = searchKey
     var res FindValueResult
 
     err := k.FindValue(*req, &res)
     if res.Value != nil {
-        return res.Value
+        return res.Value, k.Info, nil, nil
     }
 
     short_list = res.Nodes
 
     if err != nil {
         log.Printf("IterativeFindValuecould not make initial call: ", err)
-        return nil, err
+        return nil, nil, nil, err
     }
 
     // set ClosestNode to the first element of short_list
@@ -690,6 +691,10 @@ func (k *Kademlia) iterativeFindValue (key ID) ([]byte, error) {
     //these channels are each fed into FindNodeHandler
     //make rcv_thread channel
     rcv_thread := make(chan []FoundNode)
+    //make rcv_value channel
+    rcv_value := make(chan []byte)
+    //make error rcv channel
+    node_with_value := make(chan *Contact)
     //make error rcv channel
     err_ch := make(chan *Contact)
 
@@ -727,11 +732,17 @@ func (k *Kademlia) iterativeFindValue (key ID) ([]byte, error) {
                         nodeToSearch.Host = hostconverted[1]
 
                         //run findnode in a new thread
-                        go k.FindValueHandler(&nodeToSearch, searchKey, rcv_thread, err_ch)   
+                        go k.FindValueHandler(&nodeToSearch, searchKey, rcv_value, node_with_value, rcv_thread, err_ch)   
                         loopFlag = false                
                     }
                 }
                 time.Sleep(300 * time.Millisecond)
+
+            //case value returns
+            case val := <-rcv_value:
+                theonenode:= <- node_with_value
+                return val, theonenode, nil, nil
+
 
             //thread returns successfully
             case temp_list := <-rcv_thread:
@@ -795,22 +806,7 @@ func (k *Kademlia) iterativeFindValue (key ID) ([]byte, error) {
                     }               
                 }
 
-                /*
-                for j:=0; j<len(short_list); j++ {
-                    if checkedMap[short_list[j].NodeID] == 0 {
-                        //ping it
-                        hostconverted, err := net.LookupIP(short_list[j].IPAddr)
-                        err = k.DoPing(hostconverted[1], short_list[j].Port)
-                        if err != nil{
-                            //remove node from list
-                            //WILL THIS WORK? Basically copying everything in slice except failed contact.
-                            //will loop run correctly with re-indexing?
-                            short_list = append(short_list[:j], short_list[j+1:]...)
-                            j--
-                        } 
-                    }                    
-                }
-                
+              
                 //end function
                 loopFlag = false
             } else { 
@@ -820,7 +816,7 @@ func (k *Kademlia) iterativeFindValue (key ID) ([]byte, error) {
         }
     }
     
-    return nil, nil
+    return nil, nil, short_list, nil
 }
 
 /*

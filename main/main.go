@@ -141,7 +141,7 @@ func main() {
             fmt.Println(node_list[0].NodeID.AsString())       
 
         case "find_value":
-            /*input_id, err := kademlia.FromString(cmd_arr[1])
+            input_id, err := kademlia.FromString(cmd_arr[1])
             key_id, err := kademlia.FromString(cmd_arr[2])
             if err != nil {
                 log.Fatal("Find Value setup error: ", err)
@@ -149,10 +149,10 @@ func main() {
             id_contact := kadem.GetContact(input_id)
             value_return, nodes_return := kadem.DoFindValue(id_contact, key_id)
             if nodes_return != nil {
-                //fmt.Printf(nodes_return)
+                fmt.Printf(nodes_return)
             } else {
                 //fmt.Printf(value_return)
-            }*/
+            }
 
         case "whoami":
             fmt.Println(kadem.Info.NodeID.AsString())
