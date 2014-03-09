@@ -831,3 +831,11 @@ func (k *Kademlia) IterativeFindValue(searchKey ID) ([]byte, *Contact, []FoundNo
     
     return nil, nil, short_list, nil
 }
+
+func (k *Kademlia) IterativeFindValue(searchKey ID) ([]byte, *Contact, []FoundNode, error) {
+
+// func (k *Kademlia) SendPrivateMessage(startNode ID, endNode ID, message string) 
+    // run iterativeFindNode to generate the short list (with public keys)
+    // choose a random path from startNode to endNode
+    // generate a "russian doll" data structure containing data for each hop (encrypted)
+    // run Decrypt RPC handler on outer-most layer of encryption
