@@ -1,0 +1,15 @@
+1. On node initialization: Create a public and private key
+
+Public key will be in Contact struct, private key will be in new private struct in rpc.go
+
+
+2. Create a circuit
+
+Run IterativeFindNode, create a random path based on shortlist.  Edit FindNode rpc to also return public keys and put them in an array with positions matching shortlist
+
+Create encrypted/nested data structs ("olives" for now, as referred to in DryMartini implementation): starting at the end node, encrypt data with its public key/symmetric key? Not sure how symmetric keys work.  Encrypted olive acts as stored data in next level of olive.  Olive contains: FlowID, nextNodeIP, nextNodePort, prevNodeIP, prevNodePort, Data.
+
+
+3. Recurse through circuit
+
+Decrypt data received from previous node using private key.  Forward data to next node in list, where it will be decrypted by that node's private key.  Continue until end condition is reached.  DryMartini's end condition is olive data contains "end" string.
