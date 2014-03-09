@@ -13,8 +13,12 @@ type Contact struct {
     NodeID ID
     Host net.IP
     Port uint16
+    // add public keys
 }
 
+type private_key struct {
+    key string
+}
 
 // PING
 type Ping struct {
@@ -79,6 +83,7 @@ type FoundNode struct {
     IPAddr string
     Port uint16
     NodeID ID
+    // public key
 }
 
 type FindNodeResult struct {
@@ -93,6 +98,8 @@ func (a ByDistance) Swap(i,j int)       {a[i], a[j] = a[j], a[i]}
 func (a ByDistance) Len() int           {return len(a)}
 func (a ByDistance) Less(i, j int) bool {return a[i].NodeID.Less(a[j].NodeID)}
 
+
+// WE NEED TO EDIT FINDNODE TO ADD PUBLIC KEYS TO FOUNDNODE RESULT ARRAY 
 func (k *Kademlia) FindNode(req FindNodeRequest, res *FindNodeResult) error {
     
     //push req to BucketAccess
@@ -168,3 +175,12 @@ func (k *Kademlia) FindValue(req FindValueRequest, res *FindValueResult) error {
     return nil
 }
 
+
+// func (k *Kademlia) Decrypt (req DecryptionRequest, res *DecryptionResult) error {
+    // check if end condition met ("end" in the nextNodeIP field perhaps)
+    //      if yes -> execute/look at message; (modify return struct?) return;
+    // else:
+    //      use private key to decrypt the encrypted data for the next hop.
+    //      call decrypt RPC handler on next hop
+
+}
