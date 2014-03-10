@@ -175,12 +175,46 @@ func (k *Kademlia) FindValue(req FindValueRequest, res *FindValueResult) error {
     return nil
 }
 
+type ForwardRequest struct {
+    Destination Contact
+    RequestIDprev int
+    RequestIDnext int
+    Sender Contact
+    HopCntr int // 0 = you are at the destination
+    itemID ID // used to extract byte array from destination's map
+}
 
-// func (k *Kademlia) Decrypt (req DecryptionRequest, res *DecryptionResult) error {
-    // check if end condition met ("end" in the nextNodeIP field perhaps)
-    //      if yes -> execute/look at message; (modify return struct?) return;
-    // else:
-    //      use private key to decrypt the encrypted data for the next hop.
-    //      call decrypt RPC handler on next hop
+type ForwardResponse struct {
+    Payload []byte
+    RequestID int
+}
+
+func (k *Kademlia) Forward_Handle (req ForwardRequest, res *ForwardResponse) error {
+    
+    // if back at Sender (and direction = -1) -> done
+    
+         
+    if k.info.NodeID == req.Destination {
+        res.Payload = k.Bin[req.itemID] // extract data from destination
+        res.RequestID = req.RequestID
+    }
+    else {
+        if req.HopCntr == 0 {
+            // update forwarding table
+            // DoF(req.Destination, 0, req.Destination, msgID, itemID)
+        } else {
+            // update forwarding table
+            // temp = random node (that hasn't been picked)
+            //      update forwarding table
+            //      update HopCntr
+            //      DoF(temp, cntr, destination, msgID, itemID)
+        }
+    }
+    return error
+}
+
+    // if at Destination -> Reverse direction and call backwards
+    // else -> call in the direction indicated 
+    // 
 
 }
