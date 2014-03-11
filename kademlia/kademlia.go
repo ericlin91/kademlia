@@ -17,6 +17,7 @@ import(
 // Core Kademlia type. You can put whatever state you want in this.
 type Kademlia struct {
     Info *Contact
+    FTable *ForwardingTable
     Contact_table *Table
     Bin  map[ID][]byte
     Update_ch chan *Contact
@@ -62,6 +63,62 @@ type Table struct {
 	NodeID ID
 	Buckets [IDBytes*8]*list.List
 }
+
+type ForwardingTable struct {
+// explicitly defined 10 as the limit, we can adjust if necessary  
+    Entries [10] FTable_Entry
+}
+
+type FTable_Entry struct {
+    Previous Contact
+    Next Contact
+    MessageID ID
+}
+
+func (k *Kademlia) FTable_Add (prev Contact, next Contact, messID ID) {
+    // return 1 for success, 0 if full, -1 if table already contains messageID
+    if FTable_Includes(messID) {
+        return -1
+    }
+    else {
+        temp := new(FTable_Entry)
+        temp.MessageID = messID
+        temp.Previous = prev
+        temp.Next = next
+
+        for i:= 0; i < 10; i++ {
+            if k.FTable.Entries[i].Next == nil {
+                k.FTable.Entries[i] = temp
+                return 1
+            }
+        }
+    return 0
+}
+
+
+func (k *Kademlia) FTable_Includes(messageID ID) {
+    for i := 0; i<len(k.FTable.Entries); i++ {
+        if k.FTable.Entries[i].MessageID == messageID
+            return true
+    } // for each ele in forwarding table...   
+    return false
+}
+
+
+func (k *Kademlia) FTable_Remove(messageID ID) {
+    // returns 1 if successful, 0 otherwise
+    for i := 0; i<len(k.FTable.Entries); i++ {
+        if k.FTable.Entries[i].MessageID == messageID {
+            k.FTable.Entries[i].Previous = nil
+            k.FTable.Entries[i].Next = nil
+            k.FTable.Entries[i].MessageID = nil
+            return 1
+        }
+    }
+}
+            
+    // go through message IDs til you find it, remove row
+
 
 //make a Contact_table
 func NewTable(owner ID) *Table {
@@ -831,9 +888,48 @@ func (k *Kademlia) IterativeFindValue(searchKey ID) ([]byte, *Contact, []FoundNo
     
     return nil, nil, short_list, nil
 }
+type ForwardRequest struct {
+    Destination Contact
+    RequestIDprev int
+    RequestIDnext int
+    Sender Contact
+    HopCntr int // 0 = you are at the destination
+    itemID ID // used to extract byte array from destination's map
+}
 
-// func (k *Kademlia) SendPrivateMessage(startNode ID, endNode ID, message string) 
-    // run iterativeFindNode to generate the short list (with public keys)
+type ForwardResponse struct {
+    Payload []byte
+    RequestID int
+}
+
+func (k *Kademlia) SendForward(start Contact, endNode Contact, MessageID ID, hops int, itemID ID) {
+    // run iterativeFindNode to generate the short list
+        short_list := make([]FoundNode,20)
+        short_list, err = IterativeFindNode(endNode)
+
+    // initiate structs for Forward call
+        fwd_req = new(ForwardRequest)
+        fwd_rsp = new(ForwardResponse)
+        fwd_req.itemID = itemID
+        fwd_req.Destination = endNode
+        fwd_req.Sender = k.Info
+
+        // NEED TO ADD PREVID AND NEXTID
+        fwd_req.Destination = endNode
+        fwd_req.Sender = k.Info
+        err = client.Call("Kademlia.Forward_Handle", fwd_req, &fwd_rsp)
+        if err != nil {
+            log.Printf("Call: ", err)
+            return err
+        }
+        return fwd_rsp
+}
+
+
+} 
+    // run iterativeFindNode to generate the short list
     // choose a random path from startNode to endNode
     // generate a "russian doll" data structure containing data for each hop (encrypted)
     // run Decrypt RPC handler on outer-most layer of encryption
+
+

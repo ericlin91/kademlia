@@ -43,8 +43,7 @@ func (k *Kademlia) Ping(ping Ping, pong *Pong) error {
         return nil
     }
 }
-
-
+ m                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      
 // STORE
 type StoreRequest struct {
     Sender Contact
@@ -213,8 +212,7 @@ func (k *Kademlia) Forward_Handle (req ForwardRequest, res *ForwardResponse) err
     return error
 }
 
+
     // if at Destination -> Reverse direction and call backwards
     // else -> call in the direction indicated 
     // 
-
-}
