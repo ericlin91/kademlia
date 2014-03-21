@@ -251,6 +251,13 @@ func main() {
                 log.Printf("FindNode error: ", err)
             }        
         }
+        case "AnonymousMessages"
+        // format: SendForward itemID, destination, numhops
+        itemID := kademlia.FromString(cmd_arr[1])
+        destination := kademlia.FromString(cmd_arr[2])
+        numhops := kademlia.FromString(cmd_arr[3])
+        fwd_response, err = k.SendForward(destination, numhops, itemID)
+        fmt.Println("Response: ", fwd_response)
     }
 }
 

@@ -904,10 +904,6 @@ type ForwardResponse struct {
 }
 */
 func (k *Kademlia) SendForward(endNode Contact,  hops int, itemID ID) {
-    // run iterativeFindNode to generate the short list
-        short_list := make([]FoundNode,20)
-        short_list, err = IterativeFindNode(endNode)
-
     // initiate structs for Forward call
         fwd_req = new(ForwardRequest)
         fwd_rsp = new(ForwardResponse)

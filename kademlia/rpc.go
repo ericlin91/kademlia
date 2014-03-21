@@ -196,7 +196,6 @@ func (k *Kademlia) Forward_Handle (req ForwardRequest, res *ForwardResponse) err
     short_list := make([]FoundNode,20)
     short_list, err = IterativeFindNode(endNode)
 
-         
     if k.info == req.Destination {
         res.Payload = k.Bin[req.itemID] // extract data from destination
         res.RequestID = req.RequestID
