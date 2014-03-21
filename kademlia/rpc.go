@@ -6,6 +6,7 @@ package kademlia
 import "net"
 import "sort"
 import "log"
+import "math/rand"
 
 
 // Host identification.
@@ -176,8 +177,9 @@ func (k *Kademlia) FindValue(req FindValueRequest, res *FindValueResult) error {
 
 type ForwardRequest struct {
     Destination Contact
-    RequestIDprev int
-    RequestIDnext int
+    RequestID ID
+  //  RequestIDprev int
+   // RequestIDnext int
     Sender Contact
     HopCntr int // 0 = you are at the destination
     itemID ID // used to extract byte array from destination's map
@@ -191,24 +193,26 @@ type ForwardResponse struct {
 func (k *Kademlia) Forward_Handle (req ForwardRequest, res *ForwardResponse) error {
     
     // if back at Sender (and direction = -1) -> done
-    
+    short_list := make([]FoundNode,20)
+    short_list, err = IterativeFindNode(endNode)
+
          
-    if k.info.NodeID == req.Destination {
+    if k.info == req.Destination {
         res.Payload = k.Bin[req.itemID] // extract data from destination
         res.RequestID = req.RequestID
     }
     else {
         if req.HopCntr == 0 {
-            // update forwarding table
-            // DoF(req.Destination, 0, req.Destination, msgID, itemID)
+            k.FTable_Add(req.Sender, req.Destination, req.RequestID)
+            k.SendForward(req.Destination, 0, itemID)
         } else {
-            // update forwarding table
-            // temp = random node (that hasn't been picked)
-            //      update forwarding table
-            //      update HopCntr
-            //      DoF(temp, cntr, destination, msgID, itemID)
+            while !FTable_Includes(req.RequestID)
+                temp = rand.Intn(len(short_list))
+                k.FTable_Add(req.Sender, short_list[temp], req.RequestID)
+                k.SendForward(req.Destination, req.HopCntr-1, req.itemID)
         }
     }
+    k.FTable_Remove(req.RequestID)
     return error
 }
 

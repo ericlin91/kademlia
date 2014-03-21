@@ -888,10 +888,11 @@ func (k *Kademlia) IterativeFindValue(searchKey ID) ([]byte, *Contact, []FoundNo
     
     return nil, nil, short_list, nil
 }
+
+/*
 type ForwardRequest struct {
     Destination Contact
-    RequestIDprev int
-    RequestIDnext int
+//
     Sender Contact
     HopCntr int // 0 = you are at the destination
     itemID ID // used to extract byte array from destination's map
@@ -901,8 +902,8 @@ type ForwardResponse struct {
     Payload []byte
     RequestID int
 }
-
-func (k *Kademlia) SendForward(start Contact, endNode Contact, MessageID ID, hops int, itemID ID) {
+*/
+func (k *Kademlia) SendForward(endNode Contact,  hops int, itemID ID) {
     // run iterativeFindNode to generate the short list
         short_list := make([]FoundNode,20)
         short_list, err = IterativeFindNode(endNode)
@@ -914,9 +915,9 @@ func (k *Kademlia) SendForward(start Contact, endNode Contact, MessageID ID, hop
         fwd_req.Destination = endNode
         fwd_req.Sender = k.Info
 
+        // sendforward(C, 3, 7)
         // NEED TO ADD PREVID AND NEXTID
         fwd_req.Destination = endNode
-        fwd_req.Sender = k.Info
         err = client.Call("Kademlia.Forward_Handle", fwd_req, &fwd_rsp)
         if err != nil {
             log.Printf("Call: ", err)
@@ -925,11 +926,7 @@ func (k *Kademlia) SendForward(start Contact, endNode Contact, MessageID ID, hop
         return fwd_rsp
 }
 
-
-} 
     // run iterativeFindNode to generate the short list
     // choose a random path from startNode to endNode
-    // generate a "russian doll" data structure containing data for each hop (encrypted)
-    // run Decrypt RPC handler on outer-most layer of encryption
 
 
